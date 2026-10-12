@@ -1,0 +1,30 @@
+🏋️‍♂️ Physical Exercises (5 Total)
+#	Exercise Name	Method / Tracking	Clinical Purpose	Status
+1	Arm Raise	Real-Time Camera AI (ML Kit)	Overhead shoulder reach & rotator cuff mobility	Active
+2	Knee Raise	Real-Time Camera AI (ML Kit)	Hip flexion, gait clearance & standing balance	Active
+3	Elbow Flexion	Real-Time Camera AI (ML Kit)	Bicep curl kinematics & forearm self-care motion	Active
+4	Shoulder Movement	Guided Clinical Audio Timer	Scapular retraction, posture & shoulder blade rhythm	Active
+5	Leg Extension	Clinical Guidance Preview	Quadriceps strength & sit-to-stand transitions	Protocol Preview
+All camera exercises feature live angle measurements, repetition counting, 1.5-second hold validation, and Gemini TTS spoken coaching.
+🧠 Cognitive Rehabilitation Games (13 Total — All Fully Playable)
+#	Game Title	Cognitive Domain	Clinical Objective
+1	Memory Match	Short-Term Recall	Pair matching hidden cards to strengthen working memory
+2	Reaction Time	Neural Reflexes	Measure latency and tap response speed to random visual triggers
+3	Sequence Memory	Sequential Recall	Remember and reproduce progressively longer sequences
+4	Visual Search	Target Discrimination	Identify target symbols hidden among visual distractors
+5	Pattern Recognition	Pattern Analysis	Detect logical visual relationships and sequential patterns
+6	Attention Select	Selective Attention	Tap only target objects while suppressing distractors
+7	Digit Span	Working Memory Capacity	Memorize and repeat forward number strings (span 3–7)
+8	Stroop Challenge	Inhibitory Control	Suppress word reading reflex and identify ink colors
+9	Spatial Memory	Spatial Orientation	Remember and locate flashing tiles on an expanding grid
+10	Odd One Out	Cognitive Flexibility	Identify outlier items differing from the categorical group
+11	Number Ordering	Processing Speed	Tap randomly shuffled numbers in strict ascending order (1 to 9)
+12	Symbol Matching	Associative Coding	Match symbols with their corresponding number key
+13	N-Back Lite	Continuous Working Memory	Determine if current letter matches the item shown 1 step prior
+
+
+
+
+
+
+Rahul : 269067

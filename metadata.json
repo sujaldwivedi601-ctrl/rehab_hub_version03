@@ -1,0 +1,7 @@
+{
+  "name": "NeuroRehab Connect",
+  "description": "Shared secure backend, clinical doctor dashboard, and Flutter patient app integration for neurorehabilitation exercises and cognitive games.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
