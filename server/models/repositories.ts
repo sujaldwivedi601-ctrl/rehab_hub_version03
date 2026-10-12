@@ -96,7 +96,10 @@ export const UserRepository = {
 
 export const PatientProfileRepository = {
   async findByPatientId(patientId: string): Promise<IPatientProfile | null> {
-    const profile = dbStore.getState().patientProfiles.find((p) => p.patientId === patientId);
+    const normalized = String(patientId).trim();
+    const profile = dbStore.getState().patientProfiles.find(
+      (p) => p.patientId === normalized || p.patientCode === normalized
+    );
     return profile ? { ...profile } : null;
   },
 

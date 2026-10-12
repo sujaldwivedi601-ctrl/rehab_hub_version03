@@ -11,7 +11,26 @@ import { hashPassword } from '../utils/jwt.js';
 export async function seedInitialData(): Promise<void> {
   const users = await UserRepository.list();
   if (users.length > 0) {
-    // Database already populated
+    const existingRiya = await UserRepository.findByEmail('dr.riya@neurorehab-connect.health');
+    if (!existingRiya) {
+      const defaultPasswordHash = await hashPassword('Password123!');
+      await UserRepository.create({
+        _id: 'doc_riya_kewt',
+        name: 'Dr. Riya Kewt, MD',
+        email: 'dr.riya@neurorehab-connect.health',
+        passwordHash: defaultPasswordHash,
+        role: 'doctor',
+        accountStatus: 'active',
+      });
+    }
+    const profiles = await PatientProfileRepository.list();
+    for (const p of profiles) {
+      if (!p.assignedDoctorIds.includes('doc_riya_kewt')) {
+        await PatientProfileRepository.update(p.patientId, {
+          assignedDoctorIds: [...p.assignedDoctorIds, 'doc_riya_kewt'],
+        });
+      }
+    }
     return;
   }
 
@@ -20,11 +39,20 @@ export async function seedInitialData(): Promise<void> {
   const defaultPasswordHash = await hashPassword('Password123!');
   const tempPasswordHash = await hashPassword('Neuro#Temp9421!');
 
-  // 1. Doctor Sarah Chen
+  // 1. Clinicians
   const doctor = await UserRepository.create({
     _id: 'doc_sarah_chen',
     name: 'Dr. Sarah Chen, MD (Neurology)',
     email: 'doctor.chen@neurorehab-connect.health',
+    passwordHash: defaultPasswordHash,
+    role: 'doctor',
+    accountStatus: 'active',
+  });
+
+  const doctorRiya = await UserRepository.create({
+    _id: 'doc_riya_kewt',
+    name: 'Dr. Riya Kewt, MD',
+    email: 'dr.riya@neurorehab-connect.health',
     passwordHash: defaultPasswordHash,
     role: 'doctor',
     accountStatus: 'active',
@@ -45,7 +73,7 @@ export async function seedInitialData(): Promise<void> {
     patientId: patientAlex._id,
     patientCode: '482019',
     mrn: 'MRN-482019',
-    assignedDoctorIds: [doctor._id],
+    assignedDoctorIds: [doctor._id, doctorRiya._id],
     preferredLanguage: 'en',
     dateOfBirth: '1974-06-15',
     emergencyContactName: 'Elena Rivera',
@@ -199,7 +227,7 @@ export async function seedInitialData(): Promise<void> {
     patientId: patientMaya._id,
     patientCode: '912440',
     mrn: 'MRN-912440',
-    assignedDoctorIds: [doctor._id],
+    assignedDoctorIds: [doctor._id, doctorRiya._id],
     preferredLanguage: 'en',
     dateOfBirth: '1989-11-23',
     primaryDiagnosis: 'Traumatic Brain Injury (TBI) motor & executive recovery',

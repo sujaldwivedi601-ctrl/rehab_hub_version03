@@ -141,7 +141,7 @@ export function PatientDetailView({ patientData, onRefresh, onDeletePatient }: P
         patientId: docId,
         patientName: user.name,
         condition: profile?.primaryDiagnosis || 'Stroke Rehabilitation',
-        doctorName: currentDoc?.name || 'Dr. Rostova',
+        doctorName: currentDoc?.name || 'Dr. Riya Kewt, MD',
         clinicName: currentDoc?.hospital || 'NeuroRehab Institute',
         targetDailyMinutes: 30,
         doctorAdvice: dietToUse?.overview || profile?.clinicalNotes || plan?.notes || 'Complete prescribed daily rehabilitation exercises.',

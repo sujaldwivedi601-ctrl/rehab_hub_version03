@@ -87,8 +87,8 @@
       "accountStatus": "active",
       "mustChangePassword": false,
       "createdAt": "2026-10-10T15:46:27.581Z",
-      "updatedAt": "2026-10-11T10:58:14.224Z",
-      "lastLoginAt": "2026-10-11T10:58:14.224Z"
+      "updatedAt": "2026-10-12T17:52:58.523Z",
+      "lastLoginAt": "2026-10-12T17:52:58.523Z"
     },
     {
       "_id": "usr_97e6b132e878",
@@ -145,6 +145,18 @@
       "createdAt": "2026-10-11T11:02:49.219Z",
       "updatedAt": "2026-10-11T11:02:49.219Z",
       "patientCode": "790532"
+    },
+    {
+      "_id": "doc_riya_kewt",
+      "name": "Dr. Riya Kewt, MD",
+      "email": "dr.riya@neurorehab-connect.health",
+      "passwordHash": "$2b$12$kx3mWyCpAAsCjuyQCeWiYeKW6f5Z04Xz19htq4055M1lHBod.CI.m",
+      "role": "doctor",
+      "accountStatus": "active",
+      "mustChangePassword": false,
+      "createdAt": "2026-10-12T17:47:13.921Z",
+      "updatedAt": "2026-10-12T18:03:43.910Z",
+      "lastLoginAt": "2026-10-12T18:03:43.909Z"
     }
   ],
   "patientProfiles": [
@@ -153,14 +165,15 @@
       "patientId": "usr_maya_lin",
       "mrn": "MRN-912440",
       "assignedDoctorIds": [
-        "doc_sarah_chen"
+        "doc_sarah_chen",
+        "doc_riya_kewt"
       ],
       "preferredLanguage": "en",
       "dateOfBirth": "1989-11-23",
       "primaryDiagnosis": "Traumatic Brain Injury (TBI) motor & executive recovery",
       "clinicalNotes": "Initial discharge from acute rehab. Needs gentle onboarding with cognitive games and upper extremity mobility.",
       "createdAt": "2026-10-09T14:49:50.632Z",
-      "updatedAt": "2026-10-09T14:49:50.632Z",
+      "updatedAt": "2026-10-12T18:03:42.813Z",
       "patientCode": "912440"
     },
     {
@@ -168,7 +181,8 @@
       "patientId": "usr_3ca71803514e",
       "mrn": "MRN-259942",
       "assignedDoctorIds": [
-        "usr_94ac749b85b3"
+        "usr_94ac749b85b3",
+        "doc_riya_kewt"
       ],
       "preferredLanguage": "en",
       "profilePhotoUrl": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80",
@@ -204,7 +218,7 @@
         ]
       },
       "createdAt": "2026-10-10T02:29:17.421Z",
-      "updatedAt": "2026-10-10T02:29:17.421Z",
+      "updatedAt": "2026-10-12T18:03:42.813Z",
       "patientCode": "259942"
     },
     {
@@ -212,7 +226,8 @@
       "patientId": "usr_40cd9b1201ab",
       "mrn": "MRN-917102",
       "assignedDoctorIds": [
-        "usr_27b2b9c8cfc1"
+        "usr_27b2b9c8cfc1",
+        "doc_riya_kewt"
       ],
       "preferredLanguage": "en",
       "dateOfBirth": "1980-01-01",
@@ -228,7 +243,7 @@
         "foodsToAvoid": []
       },
       "createdAt": "2026-10-10T11:27:25.023Z",
-      "updatedAt": "2026-10-10T15:22:23.858Z",
+      "updatedAt": "2026-10-12T18:03:42.814Z",
       "profilePhotoUrl": "https://i.pinimg.com/736x/d1/8f/c5/d18fc51030fa273f0ca53e1cab27464e.jpg",
       "patientCode": "459107"
     },
@@ -238,7 +253,8 @@
       "patientCode": "269067",
       "mrn": "MRN-269067",
       "assignedDoctorIds": [
-        "usr_24401e73d1d5"
+        "usr_24401e73d1d5",
+        "doc_riya_kewt"
       ],
       "preferredLanguage": "en",
       "dateOfBirth": "1980-01-01",
@@ -254,7 +270,7 @@
         "foodsToAvoid": []
       },
       "createdAt": "2026-10-11T03:31:09.745Z",
-      "updatedAt": "2026-10-11T03:31:09.745Z"
+      "updatedAt": "2026-10-12T18:03:42.814Z"
     },
     {
       "_id": "prof_043d8a55d539",
@@ -262,7 +278,8 @@
       "patientCode": "697623",
       "mrn": "MRN-697623",
       "assignedDoctorIds": [
-        "usr_24401e73d1d5"
+        "usr_24401e73d1d5",
+        "doc_riya_kewt"
       ],
       "preferredLanguage": "en",
       "dateOfBirth": "1980-01-01",
@@ -278,7 +295,7 @@
         "foodsToAvoid": []
       },
       "createdAt": "2026-10-11T04:39:26.693Z",
-      "updatedAt": "2026-10-11T04:39:26.693Z"
+      "updatedAt": "2026-10-12T18:03:42.814Z"
     },
     {
       "_id": "prof_c146e8343053",
@@ -286,7 +303,8 @@
       "patientCode": "777558",
       "mrn": "MRN-777558",
       "assignedDoctorIds": [
-        "usr_24401e73d1d5"
+        "usr_24401e73d1d5",
+        "doc_riya_kewt"
       ],
       "preferredLanguage": "en",
       "dateOfBirth": "1980-01-01",
@@ -302,7 +320,7 @@
         "foodsToAvoid": []
       },
       "createdAt": "2026-10-11T09:40:55.587Z",
-      "updatedAt": "2026-10-11T09:40:55.587Z"
+      "updatedAt": "2026-10-12T18:03:42.814Z"
     },
     {
       "_id": "prof_0dc3576c4bda",
@@ -310,7 +328,8 @@
       "patientCode": "790532",
       "mrn": "MRN-790532",
       "assignedDoctorIds": [
-        "usr_24401e73d1d5"
+        "usr_24401e73d1d5",
+        "doc_riya_kewt"
       ],
       "preferredLanguage": "en",
       "dateOfBirth": "1980-01-01",
@@ -326,7 +345,7 @@
         "foodsToAvoid": []
       },
       "createdAt": "2026-10-11T11:02:49.220Z",
-      "updatedAt": "2026-10-11T11:02:49.220Z"
+      "updatedAt": "2026-10-12T18:03:42.815Z"
     }
   ],
   "rehabilitationPlans": [
@@ -1383,6 +1402,36 @@
       "ipAddress": "127.0.0.1",
       "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
       "createdAt": "2026-10-11T10:58:14.223Z"
+    },
+    {
+      "_id": "rt_49b4dd2d0cb4",
+      "tokenHash": "a20d2e7ec0ebf1563b4512409514ae671bc5a251d18347447900775faa3cd383",
+      "userId": "usr_24401e73d1d5",
+      "expiresAt": "2026-11-11T17:52:58.521Z",
+      "revoked": false,
+      "ipAddress": "127.0.0.1",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+      "createdAt": "2026-10-12T17:52:58.522Z"
+    },
+    {
+      "_id": "rt_65a24d50e679",
+      "tokenHash": "6edf3727a3ce6d5d05e9d7af230da5cc467fc638f4a7b7967860aacb697728bd",
+      "userId": "doc_riya_kewt",
+      "expiresAt": "2026-11-11T18:02:45.232Z",
+      "revoked": false,
+      "ipAddress": "127.0.0.1",
+      "userAgent": "curl/7.88.1",
+      "createdAt": "2026-10-12T18:02:45.233Z"
+    },
+    {
+      "_id": "rt_d28447f11549",
+      "tokenHash": "be837b0fc0939880bafc5aeac111f9c9028b78068880e30b57a7847f069244d5",
+      "userId": "doc_riya_kewt",
+      "expiresAt": "2026-11-11T18:03:43.908Z",
+      "revoked": false,
+      "ipAddress": "127.0.0.1",
+      "userAgent": "curl/7.88.1",
+      "createdAt": "2026-10-12T18:03:43.908Z"
     }
   ]
 }

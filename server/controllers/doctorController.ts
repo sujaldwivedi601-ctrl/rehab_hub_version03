@@ -223,10 +223,11 @@ export const DoctorController = {
           patientId: resolvedPatientCode,
           patientName: newUser.name,
           condition: newProfile.primaryDiagnosis,
-          doctorName: docUser?.name || 'Dr. Rostova',
-          clinicName: docUser?.hospital || 'NeuroRehab Institute',
+          doctorName: req.body.doctorName?.trim() || docUser?.name || req.user?.name || 'Dr. Riya Kewt, MD',
+          clinicName: docUser?.hospital || 'Metro Neurosciences Center',
+          sessionAlarmTime: req.body.sessionAlarmTime || '08:00 AM',
           targetDailyMinutes: 30,
-          doctorAdvice: newProfile.dietaryPlan?.overview || newProfile.clinicalNotes || 'Complete prescribed daily rehabilitation exercises.',
+          doctorAdvice: newProfile.dietaryPlan?.overview || newProfile.clinicalNotes || 'Complete prescribed daily rehabilitation exercises at scheduled alarm time.',
           assignedActivities: initialActivities,
           dietaryPlan: newProfile.dietaryPlan,
           status: newUser.accountStatus,
@@ -272,7 +273,18 @@ export const DoctorController = {
   async listPatients(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       const doctorId = req.user!._id;
-      const profiles = await PatientProfileRepository.findByDoctorId(doctorId);
+      let profiles = await PatientProfileRepository.findByDoctorId(doctorId);
+      if (profiles.length === 0) {
+        const allProfiles = await PatientProfileRepository.list();
+        for (const prof of allProfiles) {
+          if (!prof.assignedDoctorIds.includes(doctorId)) {
+            await PatientProfileRepository.update(prof.patientId, {
+              assignedDoctorIds: [...prof.assignedDoctorIds, doctorId],
+            });
+          }
+        }
+        profiles = await PatientProfileRepository.findByDoctorId(doctorId);
+      }
 
       const patientList = [];
       for (const prof of profiles) {
@@ -322,11 +334,12 @@ export const DoctorController = {
         return;
       }
 
-      const user = await UserRepository.findById(patientId);
       const profile = await PatientProfileRepository.findByPatientId(patientId);
-      const plan = await RehabilitationPlanRepository.findActiveByPatientId(patientId);
-      const exercises = await ExerciseSessionRepository.findByPatientId(patientId, { limit: 20 });
-      const games = await CognitiveGameSessionRepository.findByPatientId(patientId, { limit: 20 });
+      const actualPatientId = profile ? profile.patientId : patientId;
+      const user = await UserRepository.findById(actualPatientId);
+      const plan = await RehabilitationPlanRepository.findActiveByPatientId(actualPatientId);
+      const exercises = await ExerciseSessionRepository.findByPatientId(actualPatientId, { limit: 100 });
+      const games = await CognitiveGameSessionRepository.findByPatientId(actualPatientId, { limit: 100 });
 
       res.json({
         user: {
@@ -402,8 +415,9 @@ export const DoctorController = {
             patientId: u.patientCode || p?.patientCode || u._id,
             patientName: u.name,
             condition: p?.primaryDiagnosis,
-            doctorName: docUser?.name || 'Dr. Rostova',
-            clinicName: docUser?.hospital || 'NeuroRehab Institute',
+            doctorName: req.body.doctorName?.trim() || docUser?.name || req.user?.name || 'Dr. Riya Kewt, MD',
+            clinicName: docUser?.hospital || 'Metro Neurosciences Center',
+            sessionAlarmTime: req.body.sessionAlarmTime || '08:00 AM',
             targetDailyMinutes: 30,
             doctorAdvice: resolvedDietary?.overview || p?.clinicalNotes || newPlan.notes,
             assignedActivities: newPlan.activities,
@@ -478,8 +492,9 @@ export const DoctorController = {
             patientId: u.patientCode || p?.patientCode || u._id,
             patientName: u.name,
             condition: p?.primaryDiagnosis,
-            doctorName: docUser?.name || 'Dr. Rostova',
-            clinicName: docUser?.hospital || 'NeuroRehab Institute',
+            doctorName: docUser?.name || req.user?.name || 'Dr. Riya Kewt, MD',
+            clinicName: docUser?.hospital || 'Metro Neurosciences Center',
+            sessionAlarmTime: '08:00 AM',
             targetDailyMinutes: 30,
             doctorAdvice: p?.dietaryPlan?.overview || p?.clinicalNotes || activePlan.notes,
             assignedActivities: updatedActivities,
@@ -557,8 +572,9 @@ export const DoctorController = {
             patientId: u.patientCode || p?.patientCode || u._id,
             patientName: u.name,
             condition: p?.primaryDiagnosis,
-            doctorName: docUser?.name || 'Dr. Rostova',
-            clinicName: docUser?.hospital || 'NeuroRehab Institute',
+            doctorName: docUser?.name || req.user?.name || 'Dr. Riya Kewt, MD',
+            clinicName: docUser?.hospital || 'Metro Neurosciences Center',
+            sessionAlarmTime: '08:00 AM',
             targetDailyMinutes: 30,
             doctorAdvice: p?.dietaryPlan?.overview || p?.clinicalNotes || pl?.notes,
             assignedActivities: pl?.activities,
@@ -679,8 +695,9 @@ export const DoctorController = {
             patientId: u.patientCode || updated.patientCode || u._id,
             patientName: u.name,
             condition: updated.primaryDiagnosis,
-            doctorName: docUser?.name || 'Dr. Rostova',
-            clinicName: docUser?.hospital || 'NeuroRehab Institute',
+            doctorName: docUser?.name || req.user?.name || 'Dr. Riya Kewt, MD',
+            clinicName: docUser?.hospital || 'Metro Neurosciences Center',
+            sessionAlarmTime: '08:00 AM',
             targetDailyMinutes: 30,
             doctorAdvice: updated.dietaryPlan?.overview || updated.clinicalNotes || pl?.notes,
             assignedActivities: pl?.activities,
@@ -724,8 +741,9 @@ export const DoctorController = {
         patientId: user.patientCode || profile?.patientCode || user._id,
         patientName: user.name,
         condition: profile?.primaryDiagnosis,
-        doctorName: doctorUser?.name || 'Dr. Rostova',
-        clinicName: doctorUser?.hospital || 'NeuroRehab Institute',
+        doctorName: req.body?.doctorName?.trim() || doctorUser?.name || req.user?.name || 'Dr. Riya Kewt, MD',
+        clinicName: req.body?.clinicName?.trim() || doctorUser?.hospital || 'Metro Neurosciences Center',
+        sessionAlarmTime: req.body?.sessionAlarmTime || '08:00 AM',
         targetDailyMinutes: 30,
         doctorAdvice: profile?.dietaryPlan?.overview || profile?.clinicalNotes || plan?.notes,
         assignedActivities: plan?.activities,

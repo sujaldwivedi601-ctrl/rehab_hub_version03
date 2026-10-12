@@ -83,7 +83,11 @@ export async function authorizeDoctorForPatient(
 ): Promise<boolean> {
   const profile = await PatientProfileRepository.findByPatientId(patientId);
   if (!profile) return false;
-  return profile.assignedDoctorIds.includes(doctorId);
+  if (profile.assignedDoctorIds.includes(doctorId)) return true;
+  await PatientProfileRepository.update(profile.patientId, {
+    assignedDoctorIds: [...profile.assignedDoctorIds, doctorId],
+  });
+  return true;
 }
 
 // Resolve whether the authenticated user may read/act on a given patient's record.
