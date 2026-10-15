@@ -64,18 +64,6 @@ export function DoctorAuthModal({ isOpen, onSuccess, onClose, initialMode = 'log
     }
   }
 
-  async function handleQuickDemoLogin() {
-    setError(null);
-    setLoading(true);
-    try {
-      const res = await ApiService.doctorLogin('doctor.chen@neurorehab-connect.health', 'Password123!');
-      onSuccess(res.user);
-    } catch (err: any) {
-      setError(err.message || 'Demo login failed.');
-    } finally {
-      setLoading(false);
-    }
-  }
 
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault();
@@ -310,66 +298,6 @@ export function DoctorAuthModal({ isOpen, onSuccess, onClose, initialMode = 'log
                   </>
                 )}
               </button>
-
-              <div className="pt-2 border-t border-slate-100 space-y-1.5">
-                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider text-center">Quick Clinician Access</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    disabled={loading}
-                    onClick={async () => {
-                      setLoading(true);
-                      setError(null);
-                      try {
-                        const res = await ApiService.doctorLogin('dr.riya@neurorehab-connect.health', 'Password123!');
-                        onSuccess(res.user);
-                      } catch {
-                        // If user doesn't exist yet, try registering Dr. Riya Kewt
-                        try {
-                          const res = await ApiService.doctorRegister({
-                            name: 'Dr. Riya Kewt, MD',
-                            email: 'dr.riya@neurorehab-connect.health',
-                            password: 'Password123!',
-                            specialty: 'Neurology & Neurorehabilitation',
-                            hospital: 'Metro Neurosciences Center',
-                            gender: 'Female',
-                          });
-                          onSuccess(res.user);
-                        } catch (err: any) {
-                          setError(err.message || 'Login failed');
-                        }
-                      } finally {
-                        setLoading(false);
-                      }
-                    }}
-                    className="p-2 text-xs font-semibold rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 transition text-left flex flex-col cursor-pointer border border-blue-100"
-                  >
-                    <span className="font-bold">Dr. Riya Kewt, MD</span>
-                    <span className="text-[10px] text-blue-500 font-normal">Lead Neuro-Clinician</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    disabled={loading}
-                    onClick={async () => {
-                      setLoading(true);
-                      setError(null);
-                      try {
-                        const res = await ApiService.doctorLogin('doctor.chen@neurorehab-connect.health', 'Password123!');
-                        onSuccess(res.user);
-                      } catch (err: any) {
-                        setError(err.message || 'Demo login failed');
-                      } finally {
-                        setLoading(false);
-                      }
-                    }}
-                    className="p-2 text-xs font-semibold rounded-xl bg-slate-50 text-slate-700 hover:bg-slate-100 transition text-left flex flex-col cursor-pointer border border-slate-200"
-                  >
-                    <span className="font-bold">Dr. Sarah Chen, MD</span>
-                    <span className="text-[10px] text-slate-500 font-normal">Attending Neurologist</span>
-                  </button>
-                </div>
-              </div>
 
               <p className="text-center text-xs text-slate-500 pt-1">
                 No account?{' '}

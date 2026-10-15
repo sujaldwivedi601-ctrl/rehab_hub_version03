@@ -7,8 +7,11 @@ import {
 } from '../models/repositories.js';
 import { dbStore } from './connection.js';
 import { hashPassword } from '../utils/jwt.js';
+import { syncPatientToFirestoreServer } from '../services/firebaseServerSync.js';
 
 export async function seedInitialData(): Promise<void> {
+  await seedPt4028PatientIfMissing();
+
   const users = await UserRepository.list();
   if (users.length > 0) {
     const existingRiya = await UserRepository.findByEmail('dr.riya@neurorehab-connect.health');
@@ -22,14 +25,6 @@ export async function seedInitialData(): Promise<void> {
         role: 'doctor',
         accountStatus: 'active',
       });
-    }
-    const profiles = await PatientProfileRepository.list();
-    for (const p of profiles) {
-      if (!p.assignedDoctorIds.includes('doc_riya_kewt')) {
-        await PatientProfileRepository.update(p.patientId, {
-          assignedDoctorIds: [...p.assignedDoctorIds, 'doc_riya_kewt'],
-        });
-      }
     }
     return;
   }
@@ -73,7 +68,7 @@ export async function seedInitialData(): Promise<void> {
     patientId: patientAlex._id,
     patientCode: '482019',
     mrn: 'MRN-482019',
-    assignedDoctorIds: [doctor._id, doctorRiya._id],
+    assignedDoctorIds: [doctor._id],
     preferredLanguage: 'en',
     dateOfBirth: '1974-06-15',
     emergencyContactName: 'Elena Rivera',
@@ -227,7 +222,7 @@ export async function seedInitialData(): Promise<void> {
     patientId: patientMaya._id,
     patientCode: '912440',
     mrn: 'MRN-912440',
-    assignedDoctorIds: [doctor._id, doctorRiya._id],
+    assignedDoctorIds: [doctor._id],
     preferredLanguage: 'en',
     dateOfBirth: '1989-11-23',
     primaryDiagnosis: 'Traumatic Brain Injury (TBI) motor & executive recovery',
@@ -308,4 +303,301 @@ export async function migratePatientCodes(): Promise<void> {
   }
 
   if (changed) dbStore.saveToFile();
+}
+
+export async function seedPt4028PatientIfMissing(): Promise<void> {
+  const state = dbStore.getState();
+  const existingPatient = state.users.find((u) => u.patientCode === 'PT-4028' || u._id === 'usr_pt_4028');
+
+  // Ensure Dr. Elena Rostova account exists
+  let elenaDoc = state.users.find((u) => u._id === 'doc_elena_rostova' || u.email === 'dr.elena.rostova@neurorehab-institute.health');
+  const defaultPasswordHash = await hashPassword('Password123!');
+  if (!elenaDoc) {
+    elenaDoc = await UserRepository.create({
+      _id: 'doc_elena_rostova',
+      name: 'Dr. Elena Rostova, PT, DPT',
+      email: 'dr.elena.rostova@neurorehab-institute.health',
+      passwordHash: defaultPasswordHash,
+      role: 'doctor',
+      accountStatus: 'active',
+      specialty: 'Physical Therapy & Neurorehabilitation',
+      hospital: 'NeuroRehab Institute',
+    });
+  }
+
+  // Get all doctor IDs so PT-4028 is accessible to all logged-in doctors
+  const allDoctorIds = state.users.filter((u) => u.role === 'doctor').map((u) => u._id);
+  if (!allDoctorIds.includes('doc_elena_rostova')) allDoctorIds.push('doc_elena_rostova');
+
+  if (existingPatient) {
+    // Ensure PT-4028 is assigned to all current doctors in profile
+    const prof = state.patientProfiles.find((p) => p.patientId === existingPatient._id || p.patientCode === 'PT-4028');
+    if (prof) {
+      let updated = false;
+      for (const dId of allDoctorIds) {
+        if (!prof.assignedDoctorIds.includes(dId)) {
+          prof.assignedDoctorIds.push(dId);
+          updated = true;
+        }
+      }
+      if (updated) dbStore.saveToFile();
+    }
+    return;
+  }
+
+  console.log('[Seed] Seeding sample patient PT-4028 (John Doe) with exact clinical protocol...');
+
+  const patient = await UserRepository.create({
+    _id: 'usr_pt_4028',
+    name: 'John Doe',
+    email: 'john.doe.pt4028@patient.neurorehab.health',
+    passwordHash: defaultPasswordHash,
+    role: 'patient',
+    accountStatus: 'active',
+    patientCode: 'PT-4028',
+  });
+
+  await PatientProfileRepository.create({
+    _id: 'prof_pt_4028',
+    patientId: patient._id,
+    patientCode: 'PT-4028',
+    mrn: 'MRN-PT-4028',
+    assignedDoctorIds: allDoctorIds,
+    preferredLanguage: 'en',
+    dateOfBirth: '1978-04-12',
+    gender: 'Male',
+    primaryDiagnosis: 'Post-Stroke Motor & Cognitive Recovery',
+    clinicalNotes: 'Prescribing Doctor: Dr. Elena Rostova, PT, DPT (NeuroRehab Institute). Prescribed Time: 10:30 AM. Complete daily prescribed camera exercise repetitions and cognitive games in good lighting.',
+    dietaryPlan: {
+      overview: 'Complete daily prescribed camera exercise repetitions and cognitive games in good lighting. Maintain high protein and 2.5L hydration.',
+      hydrationTargetMl: 2500,
+    },
+  });
+
+  const exercises = [
+    {
+      exerciseId: 'arm_raise',
+      exerciseName: 'Arm Raise',
+      targetReps: 10,
+      doctorNotes: 'Focus on controlled elevation, hold at peak height for 2 seconds.',
+      targetFrequencyPerDay: 1,
+      category: 'CAMERA_VERIFIED',
+    },
+    {
+      exerciseId: 'knee_raise',
+      exerciseName: 'Knee Raise',
+      targetReps: 12,
+      doctorNotes: 'Maintain balance near a sturdy wall or chair.',
+      targetFrequencyPerDay: 1,
+      category: 'CAMERA_VERIFIED',
+    },
+    {
+      exerciseId: 'elbow_flexion',
+      exerciseName: 'Elbow Flexion',
+      targetReps: 10,
+      doctorNotes: 'Perform smooth full curling motion.',
+      targetFrequencyPerDay: 1,
+      category: 'CAMERA_VERIFIED',
+    },
+    {
+      exerciseId: 'shoulder_movement',
+      exerciseName: 'Shoulder Movement',
+      targetReps: 8,
+      doctorNotes: 'Keep motion within active pain-free arc.',
+      targetFrequencyPerDay: 1,
+      category: 'GUIDED_TIMER',
+    },
+  ];
+
+  const games = [
+    {
+      gameId: 'g1_memory_match',
+      gameName: 'Memory Match',
+      domain: 'Short-term Memory',
+      targetRounds: 2,
+      clinicalObjective: 'Select matching pairs of hidden cards to enhance working recall.',
+    },
+    {
+      gameId: 'g2_reaction_time',
+      gameName: 'Reaction Time',
+      domain: 'Neural Reflexes',
+      targetRounds: 3,
+      clinicalObjective: 'Tap rapidly after random delay triggers to measure processing latency.',
+    },
+  ];
+
+  const activities = [
+    ...exercises.map((ex, idx) => ({
+      activityId: `act_pt4028_ex_${idx}`,
+      activityType: 'physical_exercise' as const,
+      activityName: ex.exerciseName,
+      exerciseId: ex.exerciseId,
+      timeOfDay: '10:30 AM',
+      category: ex.category,
+      configuration: {
+        targetRepetitions: ex.targetReps,
+        targetRomMaxAngle: 120,
+        instructions: ex.doctorNotes,
+        category: ex.category,
+      },
+      scheduledDays: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'],
+      frequencyPerDay: 1,
+      startDate: new Date().toISOString(),
+      status: 'active' as const,
+    })),
+    ...games.map((g, idx) => ({
+      activityId: `act_pt4028_gm_${idx}`,
+      activityType: 'cognitive_game' as const,
+      activityName: g.gameName,
+      gameId: g.gameId,
+      timeOfDay: '10:30 AM',
+      clinicalObjective: g.clinicalObjective,
+      configuration: {
+        targetRounds: g.targetRounds,
+        cognitiveDomain: g.domain,
+        clinicalObjective: g.clinicalObjective,
+      },
+      scheduledDays: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'],
+      frequencyPerDay: 1,
+      startDate: new Date().toISOString(),
+      status: 'active' as const,
+    })),
+  ];
+
+  await RehabilitationPlanRepository.create({
+    planId: 'PLN-PT-4028-V1',
+    patientId: patient._id,
+    assignedByDoctorId: 'doc_elena_rostova',
+    title: 'Post-Stroke Motor & Cognitive Recovery Protocol',
+    version: 1,
+    status: 'active',
+    startDate: new Date().toISOString(),
+    clinicalGoals: [
+      'Elevate active shoulder flexion past 120 degrees without trunk compensation',
+      'Maintain >90% form accuracy on camera-verified physical therapy',
+      'Achieve short-term memory recall and reaction latency <300ms',
+    ],
+    activities,
+    notes: 'Prescribed by Dr. Elena Rostova, PT, DPT (NeuroRehab Institute) for daily 10:30 AM sessions.',
+  });
+
+  // Seed sample completed exercise sessions for compliance and telemetry metrics
+  const now = Date.now();
+  await ExerciseSessionRepository.create({
+    sessionId: `es_pt4028_arm`,
+    patientId: patient._id,
+    assignedActivityId: 'act_pt4028_ex_0',
+    exerciseId: 'arm_raise',
+    exerciseName: 'Arm Raise',
+    startedAt: new Date(now - 3600000).toISOString(),
+    completedAt: new Date(now - 3600000 + 120000).toISOString(),
+    activeDurationSeconds: 110,
+    elapsedDurationSeconds: 120,
+    targetRepetitions: 10,
+    completedRepetitions: 10,
+    validRepetitions: 10,
+    completionPercentage: 100,
+    sessionStatus: 'completed',
+    relevantMetrics: {
+      romMaxAngle: 118,
+      romMinAngle: 15,
+      avgCadenceRepsPerMin: 10,
+      symmetryScore: 92,
+      formAccuracyPercentage: 96,
+      smoothnessScore: 94,
+    },
+    measurementQuality: 'high',
+    patientFeedback: 'Arm movement felt very fluid and smooth.',
+    exerciseAlgorithmVersion: '1.2.0',
+    clientTimestamp: new Date(now - 3600000).toISOString(),
+  });
+
+  await ExerciseSessionRepository.create({
+    sessionId: `es_pt4028_knee`,
+    patientId: patient._id,
+    assignedActivityId: 'act_pt4028_ex_1',
+    exerciseId: 'knee_raise',
+    exerciseName: 'Knee Raise',
+    startedAt: new Date(now - 3200000).toISOString(),
+    completedAt: new Date(now - 3200000 + 100000).toISOString(),
+    activeDurationSeconds: 95,
+    elapsedDurationSeconds: 100,
+    targetRepetitions: 12,
+    completedRepetitions: 12,
+    validRepetitions: 12,
+    completionPercentage: 100,
+    sessionStatus: 'completed',
+    relevantMetrics: {
+      romMaxAngle: 92,
+      formAccuracyPercentage: 94,
+    },
+    clientTimestamp: new Date(now - 3200000).toISOString(),
+  });
+
+  // Seed sample completed cognitive game sessions
+  await CognitiveGameSessionRepository.create({
+    sessionId: `cgs_pt4028_mem`,
+    patientId: patient._id,
+    assignedActivityId: 'act_pt4028_gm_0',
+    gameId: 'g1_memory_match',
+    gameName: 'Memory Match',
+    cognitiveDomain: 'Short-term Memory',
+    startedAt: new Date(now - 2800000).toISOString(),
+    completedAt: new Date(now - 2800000 + 75000).toISOString(),
+    durationSeconds: 75,
+    score: 840,
+    accuracyPercentage: 94,
+    reactionTimeMs: 380,
+    difficulty: 'medium',
+    levelReached: 2,
+    sessionStatus: 'completed',
+    clientTimestamp: new Date(now - 2800000).toISOString(),
+  });
+
+  await CognitiveGameSessionRepository.create({
+    sessionId: `cgs_pt4028_react`,
+    patientId: patient._id,
+    assignedActivityId: 'act_pt4028_gm_1',
+    gameId: 'g2_reaction_time',
+    gameName: 'Reaction Time',
+    cognitiveDomain: 'Neural Reflexes',
+    startedAt: new Date(now - 2400000).toISOString(),
+    completedAt: new Date(now - 2400000 + 55000).toISOString(),
+    durationSeconds: 55,
+    score: 920,
+    accuracyPercentage: 96,
+    reactionTimeMs: 280,
+    difficulty: 'medium',
+    levelReached: 3,
+    sessionStatus: 'completed',
+    clientTimestamp: new Date(now - 2400000).toISOString(),
+  });
+
+  // Synchronize immediately to Firestore under patients/PT-4028
+  try {
+    await syncPatientToFirestoreServer({
+      patientId: 'PT-4028',
+      patientName: 'John Doe',
+      doctorName: 'Dr. Elena Rostova, PT, DPT',
+      clinicName: 'NeuroRehab Institute',
+      condition: 'Post-Stroke Motor & Cognitive Recovery',
+      sessionAlarmTime: '10:30 AM',
+      prescribedTime: '10:30 AM',
+      targetDailyMinutes: 30,
+      doctorAdvice: 'Complete daily prescribed camera exercise repetitions and cognitive games in good lighting.',
+      assignedActivities: activities,
+      status: 'active',
+      todayProgress: {
+        completedExercisesCount: 2,
+        totalPrescribedExercises: 4,
+        completedGamesCount: 2,
+        totalPrescribedGames: 2,
+        lastCompletedName: 'Knee Raise',
+        lastCompletedAt: new Date().toISOString(),
+      },
+    });
+    console.log('[Seed] Successfully seeded and synced PT-4028 (John Doe) to Firestore collection "patients"');
+  } catch (err) {
+    console.warn('[Seed] Firestore sync warning for PT-4028:', err);
+  }
 }

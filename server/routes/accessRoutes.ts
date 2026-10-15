@@ -11,9 +11,15 @@ const codeLimiter = createRateLimiter({
   message: 'Too many patient-code requests. Please wait a moment before retrying.',
 });
 
-// Resolve the entire patient record bundle from the 6-digit code.
+import { AuthController } from '../controllers/authController.js';
+
+// Resolve the entire patient record bundle from patient code, ID, or name.
 router.get('/patient/:code', codeLimiter, AccessController.getPatientByCode);
 router.get('/patient/:code/sessions', codeLimiter, AccessController.getSessionsByCode);
+
+// Mobile App direct patient login by name, code, or email
+router.post('/login', codeLimiter, AuthController.login);
+router.post('/patient-login', codeLimiter, AuthController.login);
 
 // Sync completed activity sessions against the patient code.
 router.post('/patient/:code/exercise-sessions', codeLimiter, AccessController.recordExerciseByCode);

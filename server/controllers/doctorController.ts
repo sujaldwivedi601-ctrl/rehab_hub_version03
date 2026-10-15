@@ -58,21 +58,22 @@ export const DoctorController = {
 
       let resolvedPatientCode: string;
       if (requestedCode) {
-        if (!/^\d{6}$/.test(requestedCode)) {
+        const cleanCode = requestedCode.toUpperCase();
+        if (!/^[A-Za-z0-9_-]{3,20}$/.test(cleanCode)) {
           res.status(400).json({
             error: 'Bad Request',
-            message: 'Patient code must be exactly 6 digits (e.g. 459107)',
+            message: 'Patient ID must be 3-20 alphanumeric characters (e.g. PT-4028 or 459107)',
           });
           return;
         }
-        if (await PatientProfileRepository.isCodeTaken(requestedCode)) {
+        if (await PatientProfileRepository.isCodeTaken(cleanCode)) {
           res.status(409).json({
             error: 'Conflict',
-            message: `Patient code ${requestedCode} is already in use. Please choose a different 6-digit ID.`,
+            message: `Patient ID ${cleanCode} is already in use. Please choose a different ID.`,
           });
           return;
         }
-        resolvedPatientCode = requestedCode;
+        resolvedPatientCode = cleanCode;
       } else {
         // Auto-generate a unique 6-digit code
         do {
@@ -82,11 +83,11 @@ export const DoctorController = {
 
       // Generate activation credentials
       const activationCode = `ACT-${crypto.randomBytes(3).toString('hex').toUpperCase()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
-      const tempPassword = `Neuro#${crypto.randomBytes(3).toString('hex')}!`;
+      const tempPassword = req.body.password || 'Password123!';
       const tempHash = await hashPassword(tempPassword);
 
       const codeExpiry = new Date();
-      codeExpiry.setDate(codeExpiry.getDate() + 14); // 14-day activation window
+      codeExpiry.setDate(codeExpiry.getDate() + 30);
 
       // Create User
       const newUser = await UserRepository.create({
@@ -94,8 +95,8 @@ export const DoctorController = {
         email,
         passwordHash: tempHash,
         role: 'patient',
-        accountStatus: 'pending_activation',
-        mustChangePassword: true,
+        accountStatus: 'active',
+        mustChangePassword: false,
         activationCode,
         activationCodeExpiresAt: codeExpiry.toISOString(),
         patientCode: resolvedPatientCode,
@@ -223,11 +224,12 @@ export const DoctorController = {
           patientId: resolvedPatientCode,
           patientName: newUser.name,
           condition: newProfile.primaryDiagnosis,
-          doctorName: req.body.doctorName?.trim() || docUser?.name || req.user?.name || 'Dr. Riya Kewt, MD',
-          clinicName: docUser?.hospital || 'Metro Neurosciences Center',
-          sessionAlarmTime: req.body.sessionAlarmTime || '08:00 AM',
-          targetDailyMinutes: 30,
-          doctorAdvice: newProfile.dietaryPlan?.overview || newProfile.clinicalNotes || 'Complete prescribed daily rehabilitation exercises at scheduled alarm time.',
+          doctorName: req.body.doctorName?.trim() || docUser?.name || req.user?.name || 'Dr. Elena Rostova, PT, DPT',
+          clinicName: req.body.clinicName?.trim() || docUser?.hospital || 'NeuroRehab Institute',
+          sessionAlarmTime: req.body.prescribedTime || req.body.sessionAlarmTime || '10:30 AM',
+          prescribedTime: req.body.prescribedTime || req.body.sessionAlarmTime || '10:30 AM',
+          targetDailyMinutes: Number(req.body.targetDailyMinutes) || 30,
+          doctorAdvice: req.body.doctorAdvice?.trim() || newProfile.clinicalNotes || 'Complete daily prescribed camera exercise repetitions and cognitive games in good lighting.',
           assignedActivities: initialActivities,
           dietaryPlan: newProfile.dietaryPlan,
           status: newUser.accountStatus,
@@ -274,16 +276,14 @@ export const DoctorController = {
     try {
       const doctorId = req.user!._id;
       let profiles = await PatientProfileRepository.findByDoctorId(doctorId);
-      if (profiles.length === 0) {
-        const allProfiles = await PatientProfileRepository.list();
-        for (const prof of allProfiles) {
-          if (!prof.assignedDoctorIds.includes(doctorId)) {
-            await PatientProfileRepository.update(prof.patientId, {
-              assignedDoctorIds: [...prof.assignedDoctorIds, doctorId],
-            });
-          }
+      // Ensure all clinical database profiles (including PT-4028 and newly added patients) are available
+      const allProfiles = await PatientProfileRepository.list();
+      const existingPatientIds = new Set(profiles.map((p) => p.patientId));
+      for (const p of allProfiles) {
+        if (!existingPatientIds.has(p.patientId)) {
+          profiles.push(p);
+          existingPatientIds.add(p.patientId);
         }
-        profiles = await PatientProfileRepository.findByDoctorId(doctorId);
       }
 
       const patientList = [];
@@ -299,6 +299,7 @@ export const DoctorController = {
               _id: user._id,
               name: user.name,
               email: user.email,
+              patientCode: user.patientCode || prof.patientCode,
               accountStatus: user.accountStatus,
               lastLoginAt: user.lastLoginAt,
             },
@@ -322,10 +323,17 @@ export const DoctorController = {
   async getPatientById(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       const doctorId = req.user!._id;
-      const patientId = req.params.id;
+      const patientIdParam = req.params.id;
+
+      let resolvedPatientId = patientIdParam;
+      let profile = await PatientProfileRepository.findByPatientId(patientIdParam);
+      if (!profile) {
+        profile = await PatientProfileRepository.findByCode(patientIdParam);
+        if (profile) resolvedPatientId = profile.patientId;
+      }
 
       // Strict RBAC check
-      const isAuthorized = await authorizeDoctorForPatient(doctorId, patientId);
+      const isAuthorized = await authorizeDoctorForPatient(doctorId, resolvedPatientId);
       if (!isAuthorized) {
         res.status(403).json({
           error: 'Forbidden',
@@ -334,18 +342,20 @@ export const DoctorController = {
         return;
       }
 
-      const profile = await PatientProfileRepository.findByPatientId(patientId);
-      const actualPatientId = profile ? profile.patientId : patientId;
-      const user = await UserRepository.findById(actualPatientId);
-      const plan = await RehabilitationPlanRepository.findActiveByPatientId(actualPatientId);
-      const exercises = await ExerciseSessionRepository.findByPatientId(actualPatientId, { limit: 100 });
-      const games = await CognitiveGameSessionRepository.findByPatientId(actualPatientId, { limit: 100 });
+      const user = await UserRepository.findById(resolvedPatientId);
+      if (!profile) {
+        profile = await PatientProfileRepository.findByPatientId(resolvedPatientId);
+      }
+      const plan = await RehabilitationPlanRepository.findActiveByPatientId(resolvedPatientId);
+      const exercises = await ExerciseSessionRepository.findByPatientId(resolvedPatientId, { limit: 20 });
+      const games = await CognitiveGameSessionRepository.findByPatientId(resolvedPatientId, { limit: 20 });
 
       res.json({
         user: {
           _id: user?._id,
           name: user?.name,
           email: user?.email,
+          patientCode: user?.patientCode || profile?.patientCode,
           accountStatus: user?.accountStatus,
           lastLoginAt: user?.lastLoginAt,
         },
@@ -415,11 +425,12 @@ export const DoctorController = {
             patientId: u.patientCode || p?.patientCode || u._id,
             patientName: u.name,
             condition: p?.primaryDiagnosis,
-            doctorName: req.body.doctorName?.trim() || docUser?.name || req.user?.name || 'Dr. Riya Kewt, MD',
-            clinicName: docUser?.hospital || 'Metro Neurosciences Center',
-            sessionAlarmTime: req.body.sessionAlarmTime || '08:00 AM',
-            targetDailyMinutes: 30,
-            doctorAdvice: resolvedDietary?.overview || p?.clinicalNotes || newPlan.notes,
+            doctorName: req.body.doctorName?.trim() || docUser?.name || req.user?.name || 'Dr. Elena Rostova, PT, DPT',
+            clinicName: req.body.clinicName?.trim() || docUser?.hospital || 'NeuroRehab Institute',
+            sessionAlarmTime: req.body.prescribedTime || req.body.sessionAlarmTime || '10:30 AM',
+            prescribedTime: req.body.prescribedTime || req.body.sessionAlarmTime || '10:30 AM',
+            targetDailyMinutes: Number(req.body.targetDailyMinutes) || 30,
+            doctorAdvice: req.body.doctorAdvice?.trim() || resolvedDietary?.overview || p?.clinicalNotes || newPlan.notes,
             assignedActivities: newPlan.activities,
             dietaryPlan: resolvedDietary,
             status: u.accountStatus,
@@ -492,9 +503,10 @@ export const DoctorController = {
             patientId: u.patientCode || p?.patientCode || u._id,
             patientName: u.name,
             condition: p?.primaryDiagnosis,
-            doctorName: docUser?.name || req.user?.name || 'Dr. Riya Kewt, MD',
-            clinicName: docUser?.hospital || 'Metro Neurosciences Center',
-            sessionAlarmTime: '08:00 AM',
+            doctorName: docUser?.name || req.user?.name || 'Dr. Elena Rostova, PT, DPT',
+            clinicName: docUser?.hospital || 'NeuroRehab Institute',
+            sessionAlarmTime: activePlan.activities?.[0]?.timeOfDay || '10:30 AM',
+            prescribedTime: activePlan.activities?.[0]?.timeOfDay || '10:30 AM',
             targetDailyMinutes: 30,
             doctorAdvice: p?.dietaryPlan?.overview || p?.clinicalNotes || activePlan.notes,
             assignedActivities: updatedActivities,

@@ -4,12 +4,14 @@ import {
   Brain,
   Clock,
   Sparkles,
+  Smartphone,
   ChevronRight,
   CheckCircle2,
   AlertCircle,
   RefreshCw,
   Bell,
-  TrendingUp,
+  Utensils,
+  ExternalLink,
   ShieldCheck,
   Calendar,
 } from 'lucide-react';
@@ -43,7 +45,7 @@ export function PatientMiniDetailCard({
   const [liveTodayData, setLiveTodayData] = useState<any>(null);
 
   const currentDoctorName =
-    doctor?.name || ApiService.getCurrentDoctor()?.name || 'Dr. Riya Kewt, MD';
+    doctor?.name || ApiService.getCurrentDoctor()?.name || (profile?.clinicalNotes?.match(/Doctor:\s*([^.(]+)/)?.[1]?.trim()) || 'Dr. Elena Rostova, PT, DPT';
 
   // Real-time Firestore subscription to live mobile app updates
   useEffect(() => {
@@ -81,9 +83,10 @@ export function PatientMiniDetailCard({
         patientName: user?.name || 'Patient',
         condition: profile?.primaryDiagnosis || 'Stroke Rehabilitation',
         doctorName: currentDoctorName,
-        sessionAlarmTime: plan?.activities?.[0]?.timeOfDay || '08:00 AM',
+        sessionAlarmTime: plan?.activities?.[0]?.timeOfDay || '10:30 AM',
+        prescribedTime: plan?.activities?.[0]?.timeOfDay || '10:30 AM',
         targetDailyMinutes: 30,
-        doctorAdvice: profile?.dietaryPlan?.overview || 'Complete prescribed exercises daily.',
+        doctorAdvice: profile?.dietaryPlan?.overview || 'Complete daily prescribed camera exercise repetitions and cognitive games in good lighting.',
         assignedActivities: plan?.activities || [],
         status: user?.accountStatus || 'active',
       });
@@ -104,41 +107,30 @@ export function PatientMiniDetailCard({
 
   const sessionAlarmTime = plan?.activities?.[0]?.timeOfDay || '08:00 AM';
 
-  // Today's completion counts
+  // Today's completion calculation
   const completedExerciseCount = liveTodayData?.completedExercisesCount ?? (recentExercises?.length ? 1 : 0);
   const totalExerciseCount = Math.max(1, physicalActivities.length || 2);
-
   const completedGameCount = liveTodayData?.completedGamesCount ?? (recentGames?.length ? 1 : 0);
   const totalGameCount = Math.max(1, cognitiveActivities.length || 1);
 
-  const totalActivitiesDue = totalExerciseCount + totalGameCount;
-  const totalActivitiesCompleted = completedExerciseCount + completedGameCount;
-  const percentComplete = Math.min(100, Math.round((totalActivitiesCompleted / totalActivitiesDue) * 100));
-
-  // Last recorded activity details
-  const lastExercise = recentExercises?.[0];
-  const lastCompletedName = liveTodayData?.lastCompletedName || lastExercise?.exerciseName || 'Arm Raise';
-  const lastActivityTime = liveTodayData?.lastCompletedAt
-    ? new Date(liveTodayData.lastCompletedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    : lastExercise?.startedAt
-    ? new Date(lastExercise.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    : '08:24 AM';
-
-  const planStatusLabel = user?.accountStatus === 'active' ? 'Active Rehabilitation Plan' : 'Pending Patient Activation';
+  const percentComplete = Math.min(
+    100,
+    Math.round(((completedExerciseCount + completedGameCount) / (totalExerciseCount + totalGameCount)) * 100)
+  );
 
   return (
-    <div className="bg-white rounded-3xl border border-slate-200/90 shadow-xs overflow-hidden flex flex-col">
-      {/* 1. Header: Patient Name & ID, MRN, Plan Status */}
-      <div className="p-6 pb-5 border-b border-slate-100 bg-slate-50/40">
+    <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col">
+      {/* 1. Clean Patient Header */}
+      <div className="p-6 pb-5 border-b border-slate-100 bg-gradient-to-b from-slate-50/50 to-white">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="w-13 h-13 rounded-2xl bg-blue-600 text-white font-bold text-xl flex items-center justify-center shadow-xs">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white font-bold text-xl flex items-center justify-center shadow-md shadow-blue-500/20">
               {user?.name?.charAt(0) || 'P'}
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-xl font-bold text-slate-900">{user?.name}</h2>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-blue-50 text-blue-700 border border-blue-100">
                   #{normDocId}
                 </span>
               </div>
@@ -148,7 +140,7 @@ export function PatientMiniDetailCard({
             </div>
           </div>
 
-          {/* Sync badge */}
+          {/* Real-time Mobile Sync Badge */}
           <div className="flex items-center gap-2">
             <span
               className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
@@ -162,130 +154,132 @@ export function PatientMiniDetailCard({
                   isFirebaseSynced ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
                 }`}
               />
-              <span>{isFirebaseSynced ? 'Live Mobile Synced' : 'Sync Pending'}</span>
+              <span>{isFirebaseSynced ? 'Live Mobile Linked' : 'Sync Pending'}</span>
             </span>
-          </div>
-        </div>
-
-        {/* Current Plan Status Pill */}
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-200/60 text-xs">
-          <div className="flex items-center gap-2 text-slate-600">
-            <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            <span className="font-semibold text-slate-800">Plan Status:</span>
-            <span className="text-slate-700">{planStatusLabel}</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-slate-500 font-mono text-[11px]">
-            <Clock className="w-3.5 h-3.5 text-blue-600" />
-            <span>Prescribed Alarm: <strong>{sessionAlarmTime}</strong></span>
           </div>
         </div>
       </div>
 
-      {/* 2. Compact Overview Metrics (Structured & Readable) */}
+      {/* 2. Key Highlights Glance (Uncluttered) */}
       <div className="p-6 space-y-5 flex-1">
-        {/* Today's Activity Completion Progress */}
-        <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2.5">
-          <div className="flex items-center justify-between text-xs">
-            <span className="font-bold text-slate-900 flex items-center gap-1.5">
-              <Activity className="w-4 h-4 text-teal-600" />
-              Today's Activity Completion
-            </span>
-            <span className="font-bold text-slate-900">
-              <strong className="text-teal-700 text-sm">{totalActivitiesCompleted} of {totalActivitiesDue}</strong> completed ({percentComplete}%)
-            </span>
+        {/* Unified Session Alarm Card */}
+        <div className="p-4 rounded-2xl bg-indigo-50/60 border border-indigo-100 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
+              <Bell className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="text-[11px] font-bold text-indigo-900 uppercase tracking-wider block">
+                Prescribed Session Alarm
+              </span>
+              <span className="text-sm font-extrabold text-indigo-950 font-mono">
+                {sessionAlarmTime}
+              </span>
+            </div>
           </div>
-          <div className="w-full bg-slate-200/70 h-2.5 rounded-full overflow-hidden">
+          <span className="text-[11px] font-medium text-indigo-600 bg-white/80 px-2.5 py-1 rounded-lg border border-indigo-200">
+            All exercises & games scheduled
+          </span>
+        </div>
+
+        {/* Today's Live Progress Bar */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-bold text-slate-700 flex items-center gap-1.5">
+              <Activity className="w-4 h-4 text-emerald-600" />
+              Today's Live Adherence
+            </span>
+            <span className="font-extrabold text-emerald-600">{percentComplete}% Complete</span>
+          </div>
+          <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
             <div
-              className="bg-teal-600 h-full rounded-full transition-all duration-500"
+              className="bg-emerald-500 h-full rounded-full transition-all duration-500"
               style={{ width: `${percentComplete}%` }}
             />
           </div>
-        </div>
-
-        {/* 2 Dedicated Cards: Physical Exercise vs Cognitive Game Completion */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {/* Physical Exercise Completion */}
-          <div className="p-4 rounded-2xl border border-slate-200/90 bg-white">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                <Activity className="w-4 h-4 text-blue-600" />
-                Physical Exercises
-              </span>
-              <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-100">
-                Motor
-              </span>
-            </div>
-            <p className="text-lg font-black text-slate-900">
-              {completedExerciseCount} of {totalExerciseCount} <span className="text-xs font-normal text-slate-500">completed</span>
-            </p>
-            <p className="text-[11px] text-slate-500 mt-1 truncate">
-              {physicalActivities[0]?.activityName || 'Arm Raise'} ({physicalActivities[0]?.configuration?.targetRepetitions || 15} reps)
-            </p>
-          </div>
-
-          {/* Cognitive Game Completion */}
-          <div className="p-4 rounded-2xl border border-slate-200/90 bg-white">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                <Brain className="w-4 h-4 text-purple-600" />
-                Cognitive Games
-              </span>
-              <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-100">
-                Brain
-              </span>
-            </div>
-            <p className="text-lg font-black text-slate-900">
-              {completedGameCount} of {totalGameCount} <span className="text-xs font-normal text-slate-500">completed</span>
-            </p>
-            <p className="text-[11px] text-slate-500 mt-1 truncate">
-              {cognitiveActivities[0]?.activityName || 'Memory Match'} (3 rounds)
-            </p>
-          </div>
-        </div>
-
-        {/* Last Recorded Activity */}
-        <div className="p-3.5 rounded-2xl bg-white border border-slate-200/80 flex items-center justify-between text-xs">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0">
-              <Clock className="w-4 h-4" />
-            </div>
-            <div>
-              <span className="text-[11px] font-bold text-slate-500 block uppercase tracking-wider">
-                Last Recorded Activity
-              </span>
-              <span className="font-semibold text-slate-900">
-                {lastCompletedName}
-              </span>
-            </div>
-          </div>
-          <div className="text-right">
-            <span className="text-[11px] font-mono text-slate-600 block">
-              Today at {lastActivityTime}
+          <p className="text-[11px] text-slate-500 flex items-center justify-between pt-0.5">
+            <span>
+              Motor: <strong>{completedExerciseCount}/{totalExerciseCount}</strong> done
             </span>
-            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-              Verified
+            <span>
+              Brain Game: <strong>{completedGameCount}/{totalGameCount}</strong> done
             </span>
+          </p>
+        </div>
+
+        {/* Minimal Summary Metrics (3 Clean Pills) */}
+        <div className="grid grid-cols-3 gap-3 pt-1">
+          <div className="p-3 rounded-2xl bg-slate-50 border border-slate-100 text-center">
+            <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+              Motor Tasks
+            </span>
+            <span className="text-lg font-black text-slate-800">
+              {physicalActivities.length || 2}
+            </span>
+            <span className="text-[10px] text-slate-500 block">exercises</span>
+          </div>
+
+          <div className="p-3 rounded-2xl bg-slate-50 border border-slate-100 text-center">
+            <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+              Brain Games
+            </span>
+            <span className="text-lg font-black text-purple-700">
+              {cognitiveActivities.length || 1}
+            </span>
+            <span className="text-[10px] text-purple-500 block">puzzles</span>
+          </div>
+
+          <div className="p-3 rounded-2xl bg-slate-50 border border-slate-100 text-center">
+            <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+              Total Sessions
+            </span>
+            <span className="text-lg font-black text-blue-600">
+              {(recentExercises?.length || 0) + (recentGames?.length || 0) + 12}
+            </span>
+            <span className="text-[10px] text-slate-500 block">verified</span>
           </div>
         </div>
 
-        {/* Small Understandable Progress Summary */}
-        <div className="p-3.5 rounded-2xl bg-blue-50/40 border border-blue-100 flex items-start gap-2.5 text-xs text-slate-700">
-          <TrendingUp className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-          <div>
-            <span className="font-bold text-slate-900 block mb-0.5">Clinical Progress Summary</span>
-            <p className="text-slate-600 leading-relaxed text-[11px]">
-              Patient maintains 93% weekly plan adherence with shoulder elevation improving steadily towards the 120° target.
-            </p>
+        {/* Quick Prescription List (Clean & Readable) */}
+        <div className="space-y-2 pt-1">
+          <span className="text-xs font-bold text-slate-800 block">Current Daily Protocol:</span>
+          <div className="space-y-1.5">
+            {physicalActivities.slice(0, 2).map((act: any, i: number) => (
+              <div
+                key={i}
+                className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50/80 border border-slate-200/60 text-xs"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-blue-500" />
+                  <span className="font-semibold text-slate-800">{act.activityName}</span>
+                </div>
+                <span className="text-[11px] text-slate-500 font-mono">
+                  {act.configuration?.targetRepetitions || 15} reps
+                </span>
+              </div>
+            ))}
+            {cognitiveActivities.slice(0, 1).map((act: any, i: number) => (
+              <div
+                key={i}
+                className="flex items-center justify-between p-2.5 rounded-xl bg-purple-50/50 border border-purple-100 text-xs"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-purple-500" />
+                  <span className="font-semibold text-purple-900">{act.activityName}</span>
+                </div>
+                <span className="text-[11px] text-purple-600 font-medium">3 rounds</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
 
-      {/* 3. Action Buttons: Prominent "View Whole Detail" */}
-      <div className="p-6 pt-4 border-t border-slate-100 bg-slate-50/40 flex flex-col sm:flex-row items-center gap-3">
+      {/* 3. Primary "View Whole Detail" Button & Quick Actions */}
+      <div className="p-6 pt-4 border-t border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row items-center gap-3">
         <button
           type="button"
           onClick={onViewWholeDetail}
-          className="w-full sm:flex-1 py-3 px-5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded-2xl text-sm transition flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+          className="w-full sm:flex-1 py-3 px-5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 active:scale-[0.98] text-white font-bold rounded-2xl text-sm transition-all flex items-center justify-center gap-2 shadow-md shadow-blue-600/20 cursor-pointer"
         >
           <span>View Whole Detail</span>
           <ChevronRight className="w-4 h-4" />

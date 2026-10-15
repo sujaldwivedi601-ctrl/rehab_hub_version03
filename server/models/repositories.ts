@@ -61,6 +61,55 @@ export const UserRepository = {
     return user ? { ...user } : null;
   },
 
+  async findByIdentifier(identifier: string): Promise<IUser | null> {
+    const raw = String(identifier || '').trim();
+    if (!raw) return null;
+    const lower = raw.toLowerCase();
+    const upper = raw.toUpperCase();
+    const stripped = upper.replace(/^(PT-|MRN-)/, '');
+
+    // 1. By exact email
+    const byEmail = dbStore.getState().users.find((u) => u.email.toLowerCase() === lower);
+    if (byEmail) return { ...byEmail };
+
+    // 2. By patient code (exact, uppercase, or stripped)
+    const byCode = dbStore.getState().users.find(
+      (u) =>
+        u.patientCode === raw ||
+        u.patientCode?.toUpperCase() === upper ||
+        u.patientCode?.toUpperCase() === stripped ||
+        u.patientCode?.toUpperCase().replace(/^PT-/, '') === stripped
+    );
+    if (byCode) return { ...byCode };
+
+    // 3. By Patient Name (case-insensitive)
+    const byName = dbStore.getState().users.find(
+      (u) => u.name.toLowerCase().trim() === lower
+    );
+    if (byName) return { ...byName };
+
+    // 4. By _id
+    const byId = dbStore.getState().users.find((u) => u._id === raw);
+    if (byId) return { ...byId };
+
+    // 5. Cross-check PatientProfile repository by code or MRN
+    const profile = dbStore.getState().patientProfiles.find(
+      (p) =>
+        p.patientCode === raw ||
+        p.patientCode?.toUpperCase() === upper ||
+        p.patientCode?.toUpperCase() === stripped ||
+        p.mrn === raw ||
+        p.mrn?.toUpperCase() === upper ||
+        p.mrn?.toUpperCase() === `MRN-${stripped}`
+    );
+    if (profile) {
+      const user = dbStore.getState().users.find((u) => u._id === profile.patientId);
+      if (user) return { ...user };
+    }
+
+    return null;
+  },
+
   async update(id: string, updates: Partial<IUser>): Promise<IUser | null> {
     const userIndex = dbStore.getState().users.findIndex((u) => u._id === id);
     if (userIndex === -1) return null;
@@ -96,10 +145,7 @@ export const UserRepository = {
 
 export const PatientProfileRepository = {
   async findByPatientId(patientId: string): Promise<IPatientProfile | null> {
-    const normalized = String(patientId).trim();
-    const profile = dbStore.getState().patientProfiles.find(
-      (p) => p.patientId === normalized || p.patientCode === normalized
-    );
+    const profile = dbStore.getState().patientProfiles.find((p) => p.patientId === patientId);
     return profile ? { ...profile } : null;
   },
 

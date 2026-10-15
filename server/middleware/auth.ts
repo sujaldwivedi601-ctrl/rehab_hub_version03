@@ -81,12 +81,19 @@ export async function authorizeDoctorForPatient(
   doctorId: string,
   patientId: string
 ): Promise<boolean> {
-  const profile = await PatientProfileRepository.findByPatientId(patientId);
+  let profile = await PatientProfileRepository.findByPatientId(patientId);
+  if (!profile) {
+    profile = await PatientProfileRepository.findByCode(patientId);
+  }
   if (!profile) return false;
-  if (profile.assignedDoctorIds.includes(doctorId)) return true;
-  await PatientProfileRepository.update(profile.patientId, {
-    assignedDoctorIds: [...profile.assignedDoctorIds, doctorId],
-  });
+  if (profile.assignedDoctorIds.includes(doctorId) || profile.assignedDoctorIds.length === 0) {
+    return true;
+  }
+  // Auto-associate doctor to patient if accessing from doctor dashboard
+  if (!profile.assignedDoctorIds.includes(doctorId)) {
+    profile.assignedDoctorIds.push(doctorId);
+    await PatientProfileRepository.update(profile.patientId, { assignedDoctorIds: profile.assignedDoctorIds });
+  }
   return true;
 }
 

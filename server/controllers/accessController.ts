@@ -7,7 +7,6 @@ import {
   CognitiveGameSessionRepository,
 } from '../models/repositories.js';
 import { IExerciseSession, ICognitiveGameSession } from '../models/types.js';
-import { syncPatientToFirestoreServer } from '../services/firebaseServerSync.js';
 
 // Code-based (6-digit patient code) access layer.
 // The 6-digit code is the external primary key: it resolves a patient's
@@ -15,17 +14,38 @@ import { syncPatientToFirestoreServer } from '../services/firebaseServerSync.js'
 // These endpoints are intentionally unauthenticated so a patient can open
 // their record from the mobile app simply by entering their 6-digit code.
 
-async function resolvePatient(code: string) {
-  const normalized = String(code || '').trim();
-  if (!/^\d{6}$/.test(normalized)) return null;
+async function resolvePatient(identifier: string) {
+  const raw = String(identifier || '').trim();
+  if (!raw) return null;
 
-  const profile = await PatientProfileRepository.findByCode(normalized);
+  // Try UserRepository.findByIdentifier first
+  const user = await UserRepository.findByIdentifier(raw);
+  if (user) {
+    const profile = await PatientProfileRepository.findByPatientId(user._id);
+    if (profile) {
+      return {
+        code: profile.patientCode || user.patientCode || raw,
+        profile,
+        user,
+      };
+    }
+  }
+
+  // Fallback to checking PatientProfile directly
+  const upper = raw.toUpperCase();
+  const stripped = upper.replace(/^(PT-|MRN-)/, '');
+
+  let profile = await PatientProfileRepository.findByCode(raw);
+  if (!profile) profile = await PatientProfileRepository.findByCode(upper);
+  if (!profile) profile = await PatientProfileRepository.findByCode(stripped);
+  if (!profile) profile = await PatientProfileRepository.findByPatientId(raw);
+
   if (!profile) return null;
 
-  const user = await UserRepository.findById(profile.patientId);
-  if (!user) return null;
+  const foundUser = await UserRepository.findById(profile.patientId);
+  if (!foundUser) return null;
 
-  return { code: normalized, profile, user };
+  return { code: profile.patientCode || foundUser.patientCode || raw, profile, user: foundUser };
 }
 
 export const AccessController = {
@@ -212,34 +232,6 @@ export const AccessController = {
         clientTimestamp: data.clientTimestamp || now,
       });
 
-      // Update Firestore document with todayProgress so mobile and web sync instantly
-      try {
-        const todayStr = new Date().toISOString().slice(0, 10);
-        const allUserExercises = await ExerciseSessionRepository.findByPatientId(user._id, { limit: 100 });
-        const todayExercises = allUserExercises.sessions.filter(
-          (s) => s.startedAt && s.startedAt.slice(0, 10) === todayStr
-        );
-        const plan = await RehabilitationPlanRepository.findActiveByPatientId(user._id);
-
-        await syncPatientToFirestoreServer({
-          patientId: resolved.code,
-          patientName: user.name,
-          condition: profile.primaryDiagnosis,
-          sessionAlarmTime: plan?.activities?.[0]?.timeOfDay || '08:00 AM',
-          targetDailyMinutes: 30,
-          assignedActivities: plan?.activities,
-          dietaryPlan: profile.dietaryPlan,
-          status: user.accountStatus,
-          todayProgress: {
-            completedExercisesCount: todayExercises.length,
-            lastCompletedName: data.exerciseName || 'Arm Raise',
-            lastCompletedAt: now,
-          },
-        });
-      } catch (fbErr) {
-        console.warn('[accessController] Firestore sync note on exercise:', fbErr);
-      }
-
       res.status(201).json({
         message: 'Exercise session recorded under patient code',
         patientCode: resolved.code,
@@ -303,34 +295,6 @@ export const AccessController = {
         sessionStatus: data.sessionStatus || 'completed',
         clientTimestamp: data.clientTimestamp || now,
       });
-
-      // Update Firestore document with todayProgress so mobile and web sync instantly
-      try {
-        const todayStr = new Date().toISOString().slice(0, 10);
-        const allUserGames = await CognitiveGameSessionRepository.findByPatientId(user._id, { limit: 100 });
-        const todayGames = allUserGames.sessions.filter(
-          (s) => s.startedAt && s.startedAt.slice(0, 10) === todayStr
-        );
-        const plan = await RehabilitationPlanRepository.findActiveByPatientId(user._id);
-
-        await syncPatientToFirestoreServer({
-          patientId: resolved.code,
-          patientName: user.name,
-          condition: profile.primaryDiagnosis,
-          sessionAlarmTime: plan?.activities?.[0]?.timeOfDay || '08:00 AM',
-          targetDailyMinutes: 30,
-          assignedActivities: plan?.activities,
-          dietaryPlan: profile.dietaryPlan,
-          status: user.accountStatus,
-          todayProgress: {
-            completedGamesCount: todayGames.length,
-            lastCompletedName: data.gameName || 'Memory Match',
-            lastCompletedAt: now,
-          },
-        });
-      } catch (fbErr) {
-        console.warn('[accessController] Firestore sync note on game:', fbErr);
-      }
 
       res.status(201).json({
         message: 'Cognitive game session recorded under patient code',

@@ -34,8 +34,8 @@ export interface FirestoreExercise {
   exerciseId: string;
   exerciseName: string;
   targetReps: number;
-  targetFrequencyPerDay: number;
   doctorNotes: string;
+  targetFrequencyPerDay: number;
   category: string;
   sessionTime?: string;
 }
@@ -45,6 +45,7 @@ export interface FirestoreGame {
   gameName: string;
   domain: string;
   targetRounds: number;
+  clinicalObjective?: string;
   sessionTime?: string;
 }
 
@@ -61,17 +62,18 @@ export interface FirestoreTodayProgress {
 export interface FirestorePatientPayload {
   patientId: string;
   patientName: string;
-  condition: string;
   doctorName: string;
   clinicName: string;
-  sessionAlarmTime: string; // Unified single alarm time e.g. "08:00 AM"
-  alarmHour: number;
-  alarmMinute: number;
-  targetDailyMinutes: number;
+  condition: string;
   doctorAdvice: string;
+  targetDailyMinutes: number;
+  prescribedTime: string; // e.g. "10:30 AM"
   assignedExercises: FirestoreExercise[];
   assignedGames: FirestoreGame[];
   todayProgress?: FirestoreTodayProgress;
+  sessionAlarmTime?: string; // backwards compatibility alias
+  alarmHour?: number;
+  alarmMinute?: number;
   updatedAt: any;
   source?: string;
   status?: string;
@@ -83,7 +85,8 @@ export interface PatientSyncInput {
   condition?: string;
   doctorName?: string;
   clinicName?: string;
-  sessionAlarmTime?: string; // e.g. "08:00 AM"
+  sessionAlarmTime?: string; // e.g. "10:30 AM"
+  prescribedTime?: string; // e.g. "10:30 AM"
   targetDailyMinutes?: number;
   doctorAdvice?: string;
   assignedActivities?: any[];
@@ -212,11 +215,18 @@ export function buildFirestorePatientData(input: PatientSyncInput): FirestorePat
         ? 'stroop_clash'
         : 'memory_match';
 
+      const defaultObj = cleanGameId.includes('memory')
+        ? 'Select matching pairs of hidden cards to enhance working recall.'
+        : cleanGameId.includes('reaction')
+        ? 'Tap rapidly after random delay triggers to measure processing latency.'
+        : 'Complete cognitive challenges to stimulate neuroplasticity.';
+
       assignedGames.push({
-        gameId: cleanGameId,
+        gameId: cleanGameId.startsWith('g1_') || cleanGameId.startsWith('g2_') ? cleanGameId : (cleanGameId === 'memory_match' ? 'g1_memory_match' : cleanGameId === 'reaction_time' ? 'g2_reaction_time' : cleanGameId),
         gameName: String(act.activityName || act.name || 'Memory Match'),
-        domain: String(act.configuration?.cognitiveDomain || act.domain || 'Working Memory & Executive Function'),
-        targetRounds: Number(act.configuration?.targetRounds || act.targetRounds || calculatedRounds || 3),
+        domain: String(act.configuration?.cognitiveDomain || act.domain || (cleanGameId.includes('memory') ? 'Short-term Memory' : 'Neural Reflexes')),
+        targetRounds: Number(act.configuration?.targetRounds || act.targetRounds || calculatedRounds || 2),
+        clinicalObjective: String(act.clinicalObjective || act.configuration?.clinicalObjective || defaultObj),
         sessionTime: sessionAlarmTime,
       });
     } else {
@@ -227,25 +237,36 @@ export function buildFirestorePatientData(input: PatientSyncInput): FirestorePat
       // Guard: Never allow cognitive game to leak into physical exercises
       if (COGNITIVE_GAME_IDENTIFIERS.has(exId) || exName.toLowerCase().includes('memory') || exName.toLowerCase().includes('game')) {
         assignedGames.push({
-          gameId: 'memory_match',
+          gameId: 'g1_memory_match',
           gameName: exName || 'Memory Match',
-          domain: 'Working Memory',
-          targetRounds: 3,
+          domain: 'Short-term Memory',
+          targetRounds: 2,
+          clinicalObjective: 'Select matching pairs of hidden cards to enhance working recall.',
           sessionTime: sessionAlarmTime,
         });
         continue;
       }
 
-      const resolvedExId = exId || (exName.toLowerCase().includes('knee') ? 'knee_raise' : exName.toLowerCase().includes('shoulder') ? 'shoulder_movement' : 'arm_raise');
-      const resolvedName = exName || 'Arm Raise (Anterior Deltoid & Flexion)';
+      const resolvedExId = exId || (exName.toLowerCase().includes('knee') ? 'knee_raise' : exName.toLowerCase().includes('elbow') ? 'elbow_flexion' : exName.toLowerCase().includes('shoulder') ? 'shoulder_movement' : 'arm_raise');
+      const resolvedName = exName || 'Arm Raise';
+
+      const defaultNote = resolvedExId === 'arm_raise'
+        ? 'Focus on controlled elevation, hold at peak height for 2 seconds.'
+        : resolvedExId === 'knee_raise'
+        ? 'Maintain balance near a sturdy wall or chair.'
+        : resolvedExId === 'elbow_flexion'
+        ? 'Perform smooth full curling motion.'
+        : resolvedExId === 'shoulder_movement'
+        ? 'Keep motion within active pain-free arc.'
+        : 'Perform smoothly with front camera verification.';
 
       assignedExercises.push({
         exerciseId: resolvedExId,
         exerciseName: resolvedName,
-        targetReps: Number(act.configuration?.targetRepetitions || act.targetReps || 15),
+        targetReps: Number(act.configuration?.targetRepetitions || act.targetReps || 10),
+        doctorNotes: String(act.configuration?.instructions || act.doctorNotes || defaultNote),
         targetFrequencyPerDay: 1, // Single unified daily session
-        doctorNotes: String(act.configuration?.instructions || act.doctorNotes || 'Perform at the prescribed 8:00 AM session with camera ML tracking.'),
-        category: 'CAMERA_VERIFIED',
+        category: act.category || act.configuration?.category || (resolvedExId === 'shoulder_movement' ? 'GUIDED_TIMER' : 'CAMERA_VERIFIED'),
         sessionTime: sessionAlarmTime,
       });
     }
@@ -255,48 +276,77 @@ export function buildFirestorePatientData(input: PatientSyncInput): FirestorePat
   if (assignedExercises.length === 0 && assignedGames.length === 0) {
     assignedExercises.push({
       exerciseId: 'arm_raise',
-      exerciseName: 'Arm Raise (Anterior Deltoid & Flexion)',
-      targetReps: 15,
+      exerciseName: 'Arm Raise',
+      targetReps: 10,
+      doctorNotes: 'Focus on controlled elevation, hold at peak height for 2 seconds.',
       targetFrequencyPerDay: 1,
-      doctorNotes: 'Maintain upright posture and elevate smoothly with camera verification.',
       category: 'CAMERA_VERIFIED',
       sessionTime: sessionAlarmTime,
     });
     assignedExercises.push({
       exerciseId: 'knee_raise',
-      exerciseName: 'Knee Raise (Hip Flexor & Quad Stability)',
+      exerciseName: 'Knee Raise',
       targetReps: 12,
+      doctorNotes: 'Maintain balance near a sturdy wall or chair.',
       targetFrequencyPerDay: 1,
-      doctorNotes: 'Keep back straight and lift knee to 90 degrees.',
       category: 'CAMERA_VERIFIED',
       sessionTime: sessionAlarmTime,
     });
+    assignedExercises.push({
+      exerciseId: 'elbow_flexion',
+      exerciseName: 'Elbow Flexion',
+      targetReps: 10,
+      doctorNotes: 'Perform smooth full curling motion.',
+      targetFrequencyPerDay: 1,
+      category: 'CAMERA_VERIFIED',
+      sessionTime: sessionAlarmTime,
+    });
+    assignedExercises.push({
+      exerciseId: 'shoulder_movement',
+      exerciseName: 'Shoulder Movement',
+      targetReps: 8,
+      doctorNotes: 'Keep motion within active pain-free arc.',
+      targetFrequencyPerDay: 1,
+      category: 'GUIDED_TIMER',
+      sessionTime: sessionAlarmTime,
+    });
+
     assignedGames.push({
-      gameId: 'memory_match',
+      gameId: 'g1_memory_match',
       gameName: 'Memory Match',
-      domain: 'Working Memory',
+      domain: 'Short-term Memory',
+      targetRounds: 2,
+      clinicalObjective: 'Select matching pairs of hidden cards to enhance working recall.',
+      sessionTime: sessionAlarmTime,
+    });
+    assignedGames.push({
+      gameId: 'g2_reaction_time',
+      gameName: 'Reaction Time',
+      domain: 'Neural Reflexes',
       targetRounds: 3,
+      clinicalObjective: 'Tap rapidly after random delay triggers to measure processing latency.',
       sessionTime: sessionAlarmTime,
     });
   }
 
   const targetMinutes = input.targetDailyMinutes && input.targetDailyMinutes > 0
     ? input.targetDailyMinutes
-    : Math.max(20, (assignedExercises.length * 8) + (assignedGames.length * 5));
+    : 30;
 
   const advice = input.doctorAdvice?.trim() ||
     input.clinicalNotes?.trim() ||
     input.dietaryPlan?.overview?.trim() ||
-    'Perform your prescribed exercises at the scheduled morning alarm time with front camera verification. Stay hydrated with 2.5L water daily.';
+    'Complete daily prescribed camera exercise repetitions and cognitive games in good lighting.';
 
-  // DYNAMIC DOCTOR NAME: Use currently logged-in clinician, never hardcode "Dr. Elena Rostova"
   let docName = (input.doctorName || '').trim();
-  if (!docName || docName.toLowerCase().includes('rostova') || docName.toLowerCase().includes('elena')) {
+  if (!docName) {
     const currentClinician = typeof window !== 'undefined' ? ApiService.getCurrentDoctor() : null;
-    docName = currentClinician?.name?.trim() || 'Dr. Riya Kewt, MD';
+    docName = currentClinician?.name?.trim() || 'Dr. Elena Rostova, PT, DPT';
   }
 
-  const clinicName = input.clinicName?.trim() || 'Metro Neurosciences Center';
+  const clinicName = input.clinicName?.trim() || 'NeuroRehab Institute';
+  const condition = input.condition?.trim() || 'Post-Stroke Motor & Cognitive Recovery';
+  const prescribedTime = input.prescribedTime || sessionAlarmTime || '10:30 AM';
 
   const todayProgress: FirestoreTodayProgress = {
     completedExercisesCount: input.todayProgress?.completedExercisesCount ?? 0,
@@ -308,20 +358,28 @@ export function buildFirestorePatientData(input: PatientSyncInput): FirestorePat
     liveStatus: (input.todayProgress?.completedExercisesCount ?? 0) > 0 ? 'in_progress' : 'idle',
   };
 
+  const patientRealName = input.patientName?.trim() || 'John Doe';
+  const strippedCode = normId.replace(/^(PT-|MRN-)/, '');
+
   return {
     patientId: normId,
-    patientName: input.patientName?.trim() || 'Patient',
-    condition: input.condition?.trim() || 'Stroke Rehabilitation',
+    patientName: patientRealName,
+    name: patientRealName,
+    patientCode: normId,
+    code: strippedCode,
+    loginCode: normId,
     doctorName: docName,
     clinicName,
-    sessionAlarmTime,
-    alarmHour: timeInfo.hour,
-    alarmMinute: timeInfo.minute,
-    targetDailyMinutes: targetMinutes,
+    condition,
     doctorAdvice: advice,
+    targetDailyMinutes: targetMinutes,
+    prescribedTime,
     assignedExercises,
     assignedGames,
     todayProgress,
+    sessionAlarmTime: prescribedTime,
+    alarmHour: timeInfo.hour,
+    alarmMinute: timeInfo.minute,
     updatedAt: serverTimestamp(),
     source: 'NeuroRehab Connect Portal',
     status: input.status || 'active',
@@ -344,6 +402,18 @@ export async function syncPatientToFirestore(input: PatientSyncInput): Promise<{
   let writeError: string | null = null;
   try {
     await setDoc(docRef, data, { merge: true });
+
+    // Mirror to alias and alternative collections
+    const strippedCode = normId.replace(/^(PT-|MRN-)/, '');
+    if (strippedCode && strippedCode !== normId) {
+      await setDoc(doc(firestoreDb, 'patients', strippedCode), data, { merge: true });
+    }
+    const nameSlug = (input.patientName || '').toLowerCase().replace(/[^a-z0-9]/g, '_');
+    if (nameSlug && nameSlug.length > 2) {
+      await setDoc(doc(firestoreDb, 'patients', nameSlug), data, { merge: true });
+    }
+    await setDoc(doc(firestoreDb, 'users', normId), data, { merge: true });
+    await setDoc(doc(firestoreDb, 'prescriptions', normId), data, { merge: true });
   } catch (err: any) {
     writeError = err?.message || String(err);
     console.warn(`[Firestore sync] Note for ${normId}:`, writeError);

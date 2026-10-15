@@ -20,15 +20,14 @@ import {
   Clock,
   Sparkles,
   Smartphone,
-  Code,
-  ShieldCheck,
 } from 'lucide-react';
+import { collection, onSnapshot } from 'firebase/firestore';
 import { ApiService, DoctorUser } from '../services/api';
+import { firestoreDb } from '../services/firebaseSync';
 import { PatientMiniDetailCard } from './PatientMiniDetailCard';
 import { FullPatientDetailView } from './FullPatientDetailView';
 import { NewPatientPrescriptionModal } from './NewPatientPrescriptionModal';
 import { DoctorProfileModal } from './DoctorProfileModal';
-import { MobileAppPromptModal } from './MobileAppPromptModal';
 
 interface DoctorDashboardProps {
   doctor: DoctorUser | null;
@@ -64,35 +63,10 @@ export function DoctorDashboard({
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'pending_activation'>('all');
 
-  // Full Page Detail View State (route: /doctor/patients/:patientId)
+  // Full Page Detail View State (triggered by "View Whole Detail" button)
   const [isFullDetailViewOpen, setIsFullDetailViewOpen] = useState(false);
-
-  // Mobile App Prompt & Schema Modal
-  const [isMobilePromptModalOpen, setIsMobilePromptModalOpen] = useState(false);
-
   const [isSyncingAll, setIsSyncingAll] = useState(false);
   const [syncAllToast, setSyncAllToast] = useState<string | null>(null);
-
-  // Route Synchronization with /doctor/patients/:patientId
-  useEffect(() => {
-    function handleLocationChange() {
-      const path = window.location.pathname;
-      const match = path.match(/\/doctor\/patients\/([^/]+)/);
-      if (match) {
-        const idFromUrl = match[1];
-        setIsFullDetailViewOpen(true);
-        if (idFromUrl !== selectedPatientId) {
-          setSelectedPatientId(idFromUrl);
-        }
-      } else {
-        setIsFullDetailViewOpen(false);
-      }
-    }
-
-    handleLocationChange();
-    window.addEventListener('popstate', handleLocationChange);
-    return () => window.removeEventListener('popstate', handleLocationChange);
-  }, [selectedPatientId]);
 
   // Load patients list for current doctor
   useEffect(() => {
@@ -107,7 +81,45 @@ export function DoctorDashboard({
     loadPatients();
   }, [doctor]);
 
-  async function loadPatients() {
+  // Real-time Firestore & backend synchronization
+  useEffect(() => {
+    let unsubscribeFirestore = () => {};
+    try {
+      const colRef = collection(firestoreDb, 'patients');
+      unsubscribeFirestore = onSnapshot(
+        colRef,
+        () => {
+          // Instantly refresh patients in the background when Firestore document changes
+          ApiService.getDoctorPatients().then((list) => {
+            if (list && list.length > 0) {
+              setPatients(list);
+            }
+          }).catch(() => {});
+        },
+        (err) => {
+          console.warn('Real-time Firestore snapshot listener note:', err?.message || err);
+        }
+      );
+    } catch (e) {
+      console.warn('Firestore subscription note:', e);
+    }
+
+    // Polling fallback every 3.5 seconds to guarantee instant real-time synchronization
+    const timer = setInterval(() => {
+      ApiService.getDoctorPatients().then((list) => {
+        if (list && list.length > 0) {
+          setPatients(list);
+        }
+      }).catch(() => {});
+    }, 3500);
+
+    return () => {
+      unsubscribeFirestore();
+      clearInterval(timer);
+    };
+  }, []);
+
+  async function loadPatients(targetSelectId?: string) {
     setLoading(true);
     setError(null);
     try {
@@ -115,24 +127,20 @@ export function DoctorDashboard({
       setPatients(list || []);
 
       if (list && list.length > 0) {
-        // If URL has a patient ID, honor it
-        const urlMatch = window.location.pathname.match(/\/doctor\/patients\/([^/]+)/);
-        const urlId = urlMatch ? urlMatch[1] : null;
-
-        if (urlId) {
-          const matched = list.find(
+        if (targetSelectId) {
+          const match = list.find(
             (p: any) =>
-              p.user?._id === urlId ||
-              p.user?.patientCode === urlId ||
-              p.profile?.patientCode === urlId
+              p.user?._id === targetSelectId ||
+              p.user?.patientCode === targetSelectId ||
+              p.profile?.patientCode === targetSelectId ||
+              p.profile?.mrn === targetSelectId
           );
-          if (matched) {
-            setSelectedPatientId(matched.user?._id);
-            return;
+          if (match) {
+            setSelectedPatientId(match.user._id);
+          } else if (!selectedPatientId || !list.some((p: any) => p.user?._id === selectedPatientId)) {
+            setSelectedPatientId(list[0].user?._id);
           }
-        }
-
-        if (!selectedPatientId || !list.some((p: any) => p.user?._id === selectedPatientId)) {
+        } else if (!selectedPatientId || !list.some((p: any) => p.user?._id === selectedPatientId)) {
           setSelectedPatientId(list[0].user?._id);
         }
       } else {
@@ -179,23 +187,6 @@ export function DoctorDashboard({
     }
   }
 
-  function handleOpenFullDetail() {
-    const code =
-      patientDetails?.user?.patientCode ||
-      patientDetails?.profile?.patientCode ||
-      selectedPatientId ||
-      '';
-    if (code) {
-      window.history.pushState(null, '', `/doctor/patients/${code}`);
-    }
-    setIsFullDetailViewOpen(true);
-  }
-
-  function handleBackToPatientList() {
-    window.history.pushState(null, '', '/');
-    setIsFullDetailViewOpen(false);
-  }
-
   // Filter patients by query and status
   const filteredPatients = patients.filter((p) => {
     const matchesStatus =
@@ -205,8 +196,9 @@ export function DoctorDashboard({
       !q ||
       p.user?.name?.toLowerCase().includes(q) ||
       p.user?.email?.toLowerCase().includes(q) ||
-      p.profile?.mrn?.toLowerCase().includes(q) ||
+      p.user?.patientCode?.toLowerCase().includes(q) ||
       p.profile?.patientCode?.toLowerCase().includes(q) ||
+      p.profile?.mrn?.toLowerCase().includes(q) ||
       p.profile?.primaryDiagnosis?.toLowerCase().includes(q);
     return matchesStatus && matchesSearch;
   });
@@ -218,7 +210,7 @@ export function DoctorDashboard({
         <FullPatientDetailView
           patientData={patientDetails}
           doctor={doctor}
-          onBack={handleBackToPatientList}
+          onBack={() => setIsFullDetailViewOpen(false)}
           onRefresh={() => {
             if (selectedPatientId) {
               ApiService.getPatientDetails(selectedPatientId).then(setPatientDetails);
@@ -237,12 +229,6 @@ export function DoctorDashboard({
           doctor={doctor}
         />
 
-        {/* Mobile Prompt Modal */}
-        <MobileAppPromptModal
-          isOpen={isMobilePromptModalOpen}
-          onClose={() => setIsMobilePromptModalOpen(false)}
-        />
-
         {/* Doctor Profile Modal */}
         {doctor && (
           <DoctorProfileModal
@@ -259,50 +245,50 @@ export function DoctorDashboard({
 
   return (
     <div className="space-y-6">
-      {/* Clinician Overview Banner (Clean Modern Healthcare SaaS Style) */}
-      <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-xs relative overflow-hidden">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      {/* Clinician Overview Banner */}
+      <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-indigo-950 rounded-3xl p-5 sm:p-7 text-white shadow-md relative overflow-hidden">
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1.5 max-w-2xl">
             <div className="flex items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-500/20 text-blue-200 border border-blue-400/30">
                 Authorized Clinician Portal
               </span>
-              <span className="text-xs text-slate-400">·</span>
-              <span className="text-xs text-slate-500 font-medium">Tele-Rehabilitation Patient Monitoring</span>
+              <span className="text-xs text-blue-300/80">·</span>
+              <span className="text-xs text-blue-300 font-medium">Tele-Rehabilitation Management</span>
             </div>
 
-            <h1 className="text-2xl font-black tracking-tight text-slate-900">
+            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">
               {doctor ? `Welcome, ${doctor.name}` : 'Clinical Physician Portal'}
             </h1>
 
             {doctor ? (
-              <div className="flex flex-wrap items-center gap-4 text-xs text-slate-600 mt-2">
+              <div className="flex flex-wrap items-center gap-4 text-sm text-blue-100 mt-2">
                 <div className="flex items-center gap-1.5">
-                  <UserCheck className="w-4 h-4 text-blue-600" />
+                  <UserCheck className="w-4 h-4 text-blue-300" />
                   <span><strong>{patients.length}</strong> Patient{patients.length !== 1 ? 's' : ''} Enrolled</span>
                 </div>
                 {doctor.hospital && (
                   <>
-                    <div className="w-1 h-1 rounded-full bg-slate-300"></div>
+                    <div className="w-1 h-1 rounded-full bg-blue-500"></div>
                     <div className="flex items-center gap-1.5">
-                      <Stethoscope className="w-4 h-4 text-blue-600" />
+                      <Stethoscope className="w-4 h-4 text-blue-300" />
                       <span>{doctor.hospital}</span>
                     </div>
                   </>
                 )}
                 {doctor.specialty && (
                   <>
-                    <div className="w-1 h-1 rounded-full bg-slate-300"></div>
+                    <div className="w-1 h-1 rounded-full bg-blue-500"></div>
                     <div className="flex items-center gap-1.5">
-                      <Brain className="w-4 h-4 text-purple-600" />
-                      <span className="font-semibold text-slate-800">{doctor.specialty}</span>
+                      <Brain className="w-4 h-4 text-blue-300" />
+                      <span className="font-medium bg-blue-800/50 px-2 py-0.5 rounded-md border border-blue-400/20">{doctor.specialty}</span>
                     </div>
                   </>
                 )}
               </div>
             ) : (
-              <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                Sign in to prescribe exercises, games, meal timings, and monitor patient progress in real-time.
+              <p className="text-xs sm:text-sm text-blue-200/90 leading-relaxed">
+                Sign in to prescribe exercises, games, meal timings, and view patient progress in real-time.
               </p>
             )}
           </div>
@@ -312,7 +298,7 @@ export function DoctorDashboard({
               <button
                 type="button"
                 onClick={onOpenAddPatient}
-                className="py-2.5 px-4 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-xs cursor-pointer"
+                className="py-2.5 px-4 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-sm cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>+ Prescribe New Patient</span>
@@ -321,7 +307,7 @@ export function DoctorDashboard({
               <button
                 type="button"
                 onClick={onOpenAuth}
-                className="py-2.5 px-5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition cursor-pointer"
+                className="py-2.5 px-5 bg-white text-blue-900 hover:bg-blue-50 font-bold rounded-xl text-xs transition cursor-pointer"
               >
                 Clinician Sign In
               </button>
@@ -341,7 +327,7 @@ export function DoctorDashboard({
       {/* Main 2-Column Split View: Left Patient List (4 cols), Right Mini Detail Card (8 cols) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left Column: Patient List (4 cols) */}
-        <div className="lg:col-span-4 bg-white rounded-3xl border border-slate-200/90 p-4 sm:p-5 shadow-xs space-y-4">
+        <div className="lg:col-span-4 bg-white rounded-3xl border border-slate-200/80 p-4 sm:p-5 shadow-xs space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <User className="w-4 h-4 text-blue-600" />
@@ -359,6 +345,40 @@ export function DoctorDashboard({
               <RefreshCw className={`w-3 h-3 ${isSyncingAll ? 'animate-spin' : ''}`} />
               <span>{isSyncingAll ? 'Syncing...' : 'Sync All'}</span>
             </button>
+          </div>
+
+          {/* Quick Select by Patient ID */}
+          <div className="space-y-1.5 p-2.5 rounded-2xl bg-blue-50/60 border border-blue-100">
+            <span className="text-[11px] font-bold text-blue-900 flex items-center gap-1.5">
+              <Search className="w-3 h-3 text-blue-600" />
+              Quick Select Patient by ID:
+            </span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {['PT-4028', '482019', '912440', '459107'].map((code) => {
+                const targetPatient = patients.find(
+                  (p) => p.user?.patientCode === code || p.profile?.patientCode === code
+                );
+                const isCurrent = targetPatient && selectedPatientId === targetPatient.user?._id;
+                return (
+                  <button
+                    key={code}
+                    type="button"
+                    onClick={() => {
+                      if (targetPatient) {
+                        setSelectedPatientId(targetPatient.user?._id);
+                      }
+                    }}
+                    className={`px-2 py-0.5 rounded-lg text-[11px] font-mono font-bold transition cursor-pointer border ${
+                      isCurrent
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                        : 'bg-white text-blue-700 border-blue-200 hover:bg-blue-100'
+                    }`}
+                  >
+                    #{code}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Filter Pills */}
@@ -417,33 +437,31 @@ export function DoctorDashboard({
               </button>
             </div>
           ) : (
-            <div className="space-y-2.5 max-h-[640px] overflow-y-auto pr-1">
+            <div className="space-y-2 max-h-[640px] overflow-y-auto pr-1">
               {filteredPatients.map((p) => {
                 const isSelected = selectedPatientId === p.user?._id;
+                const patientCode = p.user?.patientCode || p.profile?.patientCode || 'PT';
                 const photo =
                   p.profile?.profilePhotoUrl ||
                   '/patient-default.png';
-                const patientCode = p.user?.patientCode || p.profile?.patientCode || p.user?._id?.slice(-6) || '482019';
-                const totalDue = p.activeActivitiesCount || 3;
-                const completedToday = 2; // Real or seeded completion
 
                 return (
                   <button
                     key={p.user?._id}
                     type="button"
                     onClick={() => setSelectedPatientId(p.user?._id)}
-                    className={`w-full text-left p-3.5 rounded-2xl border transition flex items-start gap-3 cursor-pointer ${
+                    className={`w-full text-left p-3 rounded-2xl border transition flex items-start gap-3 cursor-pointer ${
                       isSelected
                         ? 'bg-blue-50/70 border-blue-400 shadow-xs ring-2 ring-blue-500/10'
                         : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/60'
                     }`}
                   >
-                    {/* Patient Photo / Initials */}
+                    {/* Patient Photo */}
                     <div className="relative shrink-0 mt-0.5">
                       <img
                         src={photo}
                         alt={p.user?.name}
-                        className="w-11 h-11 rounded-xl object-cover ring-2 ring-slate-200 shadow-xs"
+                        className="w-11 h-11 rounded-xl object-cover ring-2 ring-emerald-500/40 shadow-xs"
                       />
                       <div className="absolute -bottom-1 -right-1 bg-emerald-600 text-white p-0.5 rounded-full shadow-xs">
                         <Shield className="w-2.5 h-2.5" />
@@ -451,36 +469,37 @@ export function DoctorDashboard({
                     </div>
 
                     <div className="flex-1 min-w-0">
-                      {/* Name and Status */}
                       <div className="flex items-center justify-between gap-1">
-                        <span className="font-bold text-slate-900 text-xs truncate">
-                          {p.user?.name}
-                        </span>
+                        <div className="flex items-center gap-1.5 truncate">
+                          <span className="font-bold text-slate-900 text-xs truncate">
+                            {p.user?.name}
+                          </span>
+                          <span className="font-mono text-[10px] font-bold text-blue-700 bg-blue-100/70 px-1.5 py-0.2 rounded border border-blue-200 shrink-0">
+                            #{patientCode}
+                          </span>
+                        </div>
                         <span
                           className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold shrink-0 ${
                             p.user?.accountStatus === 'active'
-                              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                              : 'bg-amber-50 text-amber-800 border border-amber-200'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-amber-100 text-amber-800'
                           }`}
                         >
                           {p.user?.accountStatus === 'active' ? 'Active' : 'Pending'}
                         </span>
                       </div>
 
-                      {/* Diagnosis & ID */}
-                      <div className="flex items-center justify-between text-[11px] text-slate-500 mt-0.5">
-                        <span className="truncate">{p.profile?.primaryDiagnosis || 'Stroke Rehabilitation'}</span>
-                        <span className="font-mono font-bold text-slate-700 shrink-0 ml-1">#{patientCode}</span>
-                      </div>
+                      <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                        {p.profile?.primaryDiagnosis || 'Post-stroke rehab'}
+                      </p>
 
-                      {/* Today's completed activities versus activities due */}
-                      <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px]">
-                        <span className="font-semibold text-slate-600">
-                          Today: <strong className="text-teal-700">{completedToday} of {totalDue}</strong> completed
-                        </span>
-                        <span className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                      <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-400 mt-1">
+                        <span>{p.profile?.mrn || 'MRN-PENDING'}</span>
+                        <span>•</span>
+                        <span>{p.activeActivitiesCount || 4} Prescribed</span>
+                        <span className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                          <span>Synced</span>
+                          <span>Mobile Synced</span>
                         </span>
                       </div>
                     </div>
@@ -491,13 +510,13 @@ export function DoctorDashboard({
           )}
         </div>
 
-        {/* Right Column: MINI DETAILS OVERVIEW (8 cols) - Compact, Unjumbled with "View Whole Detail" */}
+        {/* Right Column: MINI DETAILS VIEW (8 cols) - Minimal, Unjumbled with "View Whole Detail" */}
         <div className="lg:col-span-8">
           {patientDetails ? (
             <PatientMiniDetailCard
               patientData={patientDetails}
               doctor={doctor}
-              onViewWholeDetail={handleOpenFullDetail}
+              onViewWholeDetail={() => setIsFullDetailViewOpen(true)}
               onRefresh={() => {
                 if (selectedPatientId) {
                   ApiService.getPatientDetails(selectedPatientId).then(setPatientDetails);
@@ -506,30 +525,44 @@ export function DoctorDashboard({
               }}
             />
           ) : (
-            <div className="bg-white rounded-3xl border border-slate-200 p-12 text-center text-slate-400 space-y-3">
-              <User className="w-10 h-10 mx-auto text-slate-300" />
-              <p className="text-sm font-semibold text-slate-700">Select a patient to inspect overview</p>
-              <p className="text-xs text-slate-400">Click on any patient in the left list.</p>
+            <div className="bg-white rounded-3xl border border-slate-200 p-12 text-center space-y-4 shadow-xs">
+              <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 mx-auto flex items-center justify-center">
+                <Stethoscope className="w-7 h-7" />
+              </div>
+              <div className="max-w-md mx-auto space-y-1">
+                <h3 className="text-base font-bold text-slate-900">Select a Patient to View Protocol</h3>
+                <p className="text-xs text-slate-500">
+                  Select a patient from the list on the left to see their quick adherence overview and access their full graphical tracking dashboard.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onOpenAddPatient}
+                className="py-2.5 px-5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition inline-flex items-center gap-2 shadow-xs cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Prescribe New Patient</span>
+              </button>
             </div>
           )}
         </div>
       </div>
 
-      {/* Modals */}
+      {/* Prescription / New Patient Modal */}
       <NewPatientPrescriptionModal
         isOpen={isAddPatientOpen}
         onClose={onCloseAddPatient}
-        onCreated={() => {
-          loadPatients();
+        onCreated={(res: any) => {
+          const newUserId = res?.patient?._id || res?.patient?.patientCode;
+          loadPatients(newUserId);
+          if (newUserId) {
+            setSelectedPatientId(newUserId);
+          }
         }}
         doctor={doctor}
       />
 
-      <MobileAppPromptModal
-        isOpen={isMobilePromptModalOpen}
-        onClose={() => setIsMobilePromptModalOpen(false)}
-      />
-
+      {/* Doctor Profile Modal */}
       {doctor && (
         <DoctorProfileModal
           isOpen={isProfileOpen}
